@@ -20,5 +20,5 @@ camera:
 solver:
     max_iters: 200
     epsilon_T: 0.02
-    trim_ratio: 0.8
+    trim_ratio: 1.0
     lr: 1
