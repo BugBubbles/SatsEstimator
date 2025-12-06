@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.14)
-project(spatiotemporal_vo_cpp)
+project(event_camera_vo_cpp)
 
-add_definitions(-DDEBUG)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+add_definitions(-DEIGEN_MAX_ALIGN_BYTES=32)
+if(DEBUG_MODE)
+    add_definitions(-DDEBUG)
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -26,17 +31,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 # --- 包含目录 ---
 include_directories(include)
 
-# --- 源文件 ---
-file(GLOB SOURCES "src/*.cpp")
-
-# --- 可执行文件 ---
-add_executable(${PROJECT_NAME} ${SOURCES})
-
-# --- 链接库 ---
-target_link_libraries(${PROJECT_NAME}
-    ${PCL_LIBRARIES}
-    ${OpenCV_LIBS}
-    Sophus::Sophus
-    Ceres::ceres 
-    Eigen3::Eigen
-)
+add_subdirectory(src)
+if(BUILD_TESTS)
+    add_subdirectory(test)
+endif()
