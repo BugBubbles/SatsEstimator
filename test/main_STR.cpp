@@ -28,10 +28,6 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  // 加载真值 (可选)
-  // std::string gt_file = config.paths.data_root + "/" + config.paths.sequences + "/" + config.paths.gt_file;
-  // data_loader.loadGroundTruth(gt_file);
-
   // 3. 初始化配准模块
   SpatioTemporalRegistration registration(
       config.camera.fx,

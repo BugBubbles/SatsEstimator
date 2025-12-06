@@ -11,20 +11,6 @@
 namespace spatiotemporal_vo
 {
 
-  struct RegistrationStats
-  {
-    double loss = 0.0;
-    int num_inliers = 0;
-    int num_iterations = 0;
-  };
-
-  struct RegistrationOutput
-  {
-    Eigen::Vector3d twist = Eigen::Vector3d::Zero();
-    RegistrationStats stats;
-    std::pair<double, double> timespan = {0.0, 0.0};
-  };
-
   class SpatioTemporalRegistration
   {
   public:
