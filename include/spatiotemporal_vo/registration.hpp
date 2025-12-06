@@ -37,14 +37,14 @@ namespace spatiotemporal_vo
         const std::vector<int> &polarity,
         const std::vector<double> &depth = {});
 
-    void optimizeWithCeres(
-        const std::vector<Eigen::Vector3d> &pts_cam_a,
-        const std::vector<Eigen::Vector3d> &pts_cam_b,
-        Eigen::Vector3d &xi, double &final_loss);
+  void optimizeWithCeres(
+      const std::vector<Eigen::Vector3d> &pts_cam_a,
+      const std::vector<Eigen::Vector3d> &pts_cam_b,
+      const std::vector<int> &correspondences,
+      Eigen::Vector3d &xi);
 
     int count_ = 1;
 
-  private:
   private:
     // 时空邻域结构
     struct TemporalNeighborhood

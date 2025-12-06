@@ -10,19 +10,6 @@
 namespace spatiotemporal_vo
 {
   // ============================================================================
-  // 辅助函数：计算点云质心
-  // ============================================================================
-  static Vec3 computeCentroid(const std::vector<Vec3> &points)
-  {
-    Vec3 centroid = Vec3::Zero();
-    for (const auto &p : points)
-    {
-      centroid += p;
-    }
-    return centroid / static_cast<double>(points.size());
-  }
-
-  // ============================================================================
   // 辅助函数：SVD 求解最优旋转（参考 Go-ICP 的 jly_icp3d.hpp）
   // ============================================================================
   static Eigen::Matrix3d computeOptimalRotation(
@@ -87,6 +74,8 @@ namespace spatiotemporal_vo
     Eigen::Matrix3d R_current = R_result;
     double prev_error = std::numeric_limits<double>::max();
     double current_error = 0.0;
+    double best_error = 100000000;
+    Eigen::Matrix3d best_R = R_result;
 
     std::vector<double> distances(num_data);
     std::vector<int> correspondences(num_data);
@@ -139,9 +128,13 @@ namespace spatiotemporal_vo
       current_error /= num_trimmed;
 
       // ========== Step 3: 检查收敛 ==========
-      if (std::abs(prev_error - current_error) < 1e-8)
+      if (std::abs(prev_error - current_error) < 1e-12)
       {
         break;
+      }
+      if (best_error > current_error){
+        best_error = current_error;
+        best_R = R_current;
       }
       prev_error = current_error;
 
@@ -206,9 +199,13 @@ namespace spatiotemporal_vo
       // 确保旋转矩阵的正交性（防止数值漂移）
       Eigen::JacobiSVD<Eigen::Matrix3d> svd(R_current, Eigen::ComputeFullU | Eigen::ComputeFullV);
       R_current = svd.matrixU() * svd.matrixV().transpose();
+      // Vec3 delta_R;
+      // optimizeWithCeres(src_centered, tgt_centered, valid_correspondences, delta_R);
+
+      // R_current = SO3::exp(delta_R).matrix() * R_current;
     }
 
-    R_result = R_current;
+    R_result = best_R;
     return current_error;
   }
 
@@ -454,16 +451,15 @@ namespace spatiotemporal_vo
 
     // 7. 将旋转矩阵转换为旋转向量
     SO3 so3_result(R_best);
-    Vec3 best_xi = so3_result.log();
 
     // 8. 输出结果
-    output.twist = -best_xi / dt * 2.0;
+    output.twist = -so3_result.log() / dt * 2.0;
     output.stats.loss = best_loss;
     output.stats.num_iterations = count_;
 
     std::cout << "[" << count_ << "] "
               << "Final loss: " << best_loss
-              << " Optimized xi: " << best_xi.transpose() << std::endl;
+              << " Optimized xi: " << output.twist.transpose() << std::endl;
 
     count_++;
     return output;
@@ -500,23 +496,24 @@ namespace spatiotemporal_vo
   void SpatioTemporalRegistration::optimizeWithCeres(
       const std::vector<Eigen::Vector3d> &pts_cam_a,
       const std::vector<Eigen::Vector3d> &pts_cam_b,
-      Eigen::Vector3d &xi, double &final_loss)
+      const std::vector<int> &correspondences,
+      Eigen::Vector3d &xi)
   {
     ceres::Problem problem;
-    ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
+    ceres::LossFunction *loss_function = new ceres::HuberLoss(0.5);
 
-    for (size_t i = 0; i < pts_cam_a.size(); ++i)
+    for (size_t i = 0; i < correspondences.size(); ++i)
     {
       ceres::CostFunction *cost_function =
           new ceres::AutoDiffCostFunction<RegistrationResidual, 3, 3>(
-              new RegistrationResidual(pts_cam_a[i], pts_cam_b[i]));
+              new RegistrationResidual(pts_cam_a[i], pts_cam_b[correspondences[i]]));
 
       problem.AddResidualBlock(cost_function, loss_function, xi.data());
     }
 
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR;
-    options.max_num_iterations = 10;
+    options.max_num_iterations = 2;
     options.num_threads = 8;
     options.minimizer_progress_to_stdout = false;
     options.function_tolerance = 1e-6;
@@ -525,6 +522,8 @@ namespace spatiotemporal_vo
 
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
+
+    double final_loss;
 
     problem.Evaluate(ceres::Problem::EvaluateOptions(), &final_loss, nullptr, nullptr, nullptr);
 
