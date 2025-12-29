@@ -2,15 +2,14 @@
 #include <filesystem>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
-#include "spatiotemporal_vo/registration.hpp"
+#include "methods/icp_estimator.hpp"
 #include "spatiotemporal_vo/logger.hpp"
-#include "spatiotemporal_vo/geometry.hpp"
 
 using namespace spatiotemporal_vo;
 
 int main(int argc, char **argv)
 {
-  std::cout << "=== Spatiotemporal Visual Odometry (C++) ===" << std::endl;
+  std::cout << "=== ICP Visual Odometry (C++) ===" << std::endl;
 
   // 1. 加载配置
   std::string config_file = (argc > 1) ? argv[1] : "../configs/default.yaml";

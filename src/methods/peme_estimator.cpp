@@ -1,5 +1,5 @@
 #include "spatiotemporal_vo/common.hpp"
-#include "PEME/peme_estimator.hpp"
+#include "methods/peme_estimator.hpp"
 #include <sophus/so3.hpp>
 #include <algorithm>
 #include <numeric>
@@ -116,15 +116,15 @@ namespace spatiotemporal_vo
     last_est_var_.setZero();
 
     // 从配置中加载参数
-    params_.ts_start = 0.2;
+    params_.ts_start = 0.8;
     params_.ts_end = 0.8;
-    params_.sample_count = 1000;
-    params_.iter_num = 50;
+    params_.sample_count = 30000;
+    params_.iter_num = 10;
     params_.ceres_iter_num = 10;
-    params_.ceres_iter_thread = 4;
+    params_.ceres_iter_thread = 8;
     params_.gaussian_size = 5;
     params_.gaussian_sigma = 1.0f;
-    params_.default_value_factor = 1.5f;
+    params_.default_value_factor = 1.0f;
   }
 
   void PEMEEstimator::projectEventsTo3D(const std::vector<Vec2> &xy,
@@ -178,7 +178,8 @@ namespace spatiotemporal_vo
                                              EventBundle &warped_bundle,
                                              bool use_later_time)
   {
-    cv::Mat image = cv::Mat::zeros(height_, width_, CV_32FC1);
+    // 创建三通道16位无符号整型图像
+    cv::Mat image = cv::Mat::zeros(height_, width_, CV_16UC3);
     int n = eventBundle_.size;
 
     warped_bundle.coord.resize(n);
@@ -194,6 +195,7 @@ namespace spatiotemporal_vo
       Sophus::SO3d R = Sophus::SO3d::exp(rotation_vec);
 
       Vec3 p3d = R.matrix() * event_undis_Bundle_.coord_3d[i];
+      warped_bundle.coord_3d[i] = p3d;
 
       // 投影到 2D
       double x = p3d(0) / p3d(2) * K_(0, 0) + K_(0, 2);
@@ -208,7 +210,17 @@ namespace spatiotemporal_vo
 
       if (warped_bundle.isInner[i])
       {
-        image.at<float>(yi, xi) += 1.0f;
+        // 获取指向该像素的三通道指针
+        uint16_t *pixel = image.ptr<uint16_t>(yi, xi);
+        if (eventBundle_.polarity[i] > 0)
+        {
+          pixel[0] += 1; // 正事件加到第一个通道
+        }
+        else
+        {
+          pixel[2] += 1; // 负事件加到第三个通道
+        }
+        // pixel[1] 保持不变
       }
     }
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "spatiotemporal_vo/common.hpp"
-#include "spatiotemporal_vo/registration.hpp"
 #include <string>
 #include <fstream>
 namespace spatiotemporal_vo

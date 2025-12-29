@@ -12,7 +12,7 @@ target_link_libraries(event_camera_vo
       ${PCL_LIBRARIES}
       ${OpenCV_LIBS}
       Sophus::Sophus
-      Ceres::ceres 
+      ${CERES_LIBRARIES}
       Eigen3::Eigen
 )
 

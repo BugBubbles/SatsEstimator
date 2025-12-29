@@ -7,7 +7,7 @@ function(add_test_executable TARGET_NAME SOURCE_FILE)
             ${PCL_LIBRARIES}
             ${OpenCV_LIBS}
             Sophus::Sophus
-            Ceres::ceres 
+            ${CERES_LIBRARIES}
             Eigen3::Eigen
     )
     # 可执行文件会自动输出到 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} (build/bin)

@@ -2,7 +2,7 @@
 #include <filesystem>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
-#include "PEME/peme_estimator.hpp"
+#include "methods/peme_estimator.hpp"
 #include "spatiotemporal_vo/logger.hpp"
 
 using namespace spatiotemporal_vo;

@@ -1,4 +1,4 @@
-#include "spatiotemporal_vo/registration.hpp"
+#include "methods/icp_estimator.hpp"
 #include "spatiotemporal_vo/common.hpp"
 #include <ceres/ceres.h>
 #include <iostream>
