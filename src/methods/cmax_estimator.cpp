@@ -45,11 +45,11 @@ namespace spatiotemporal_vo
                           double *gradient) const override
     {
       int n_points = points_.size();
-
+      int padding = 100;
       Eigen::Matrix<double, 3, 1> delta_points_T, delta_second_points_T;
       Eigen::Matrix<double, 3, 1> points_T;
       // 创建翘曲事件图像
-      cv::Mat warped_image = cv::Mat::zeros(height_, width_, CV_64F);
+      cv::Mat warped_image = cv::Mat::zeros(height_ + 2 * padding, width_ + 2 * padding, CV_64F);
 
       // 构建二维PCL点云
       pcl::PointCloud<pcl::PointXY>::Ptr cloud(new pcl::PointCloud<pcl::PointXY>());
@@ -62,39 +62,47 @@ namespace spatiotemporal_vo
         delta_points_T(1) = parameters[2] * point_(0) - parameters[0] * point_(2);
         delta_points_T(2) = -parameters[1] * point_(0) + parameters[0] * point_(1);
 
-        delta_second_points_T(0) = -parameters[2] * delta_points_T(1) + parameters[1] * delta_points_T(2);
-        delta_second_points_T(1) = parameters[2] * delta_points_T(0) - parameters[0] * delta_points_T(2);
-        delta_second_points_T(2) = -parameters[1] * delta_points_T(0) + parameters[0] * delta_points_T(1);
+        // delta_second_points_T(0) = -parameters[2] * delta_points_T(1) + parameters[1] * delta_points_T(2);
+        // delta_second_points_T(1) = parameters[2] * delta_points_T(0) - parameters[0] * delta_points_T(2);
+        // delta_second_points_T(2) = -parameters[1] * delta_points_T(0) + parameters[0] * delta_points_T(1);
         // 计算 warp 后的 3D 点
         double dt_early = delta_time_[i];
-        double dt_sq = 0.5 * dt_early * dt_early;
-        points_T(0) = point_(0) + delta_points_T(0) * dt_early + delta_second_points_T(0) * dt_sq;
-        points_T(1) = point_(1) + delta_points_T(1) * dt_early + delta_second_points_T(1) * dt_sq;
-        points_T(2) = point_(2) + delta_points_T(2) * dt_early + delta_second_points_T(2) * dt_sq;
+        // double dt_sq = 0.5 * dt_early * dt_early;
+        // points_T(0) = point_(0) + delta_points_T(0) * dt_early + delta_second_points_T(0) * dt_sq;
+        // points_T(1) = point_(1) + delta_points_T(1) * dt_early + delta_second_points_T(1) * dt_sq;
+        // points_T(2) = point_(2) + delta_points_T(2) * dt_early + delta_second_points_T(2) * dt_sq;
 
+        points_T(0) = point_(0) + delta_points_T(0) * dt_early;
+        points_T(1) = point_(1) + delta_points_T(1) * dt_early;
+        points_T(2) = point_(2) + delta_points_T(2) * dt_early;
         // 投影到 2D
-        (*cloud)[i].x = points_T(0) / points_T(2) * intrinsic_(0, 0);
-        (*cloud)[i].y = points_T(1) / points_T(2) * intrinsic_(1, 1);
+        (*cloud)[i].x = points_T(0) / points_T(2) * intrinsic_(0, 0) + intrinsic_(0, 2);
+        (*cloud)[i].y = points_T(1) / points_T(2) * intrinsic_(1, 1) + intrinsic_(1, 2);
         // 使用双线性插值将当前事件翘曲至图像
-        int x = static_cast<int>((*cloud)[i].x + intrinsic_(0, 2));
-        int y = static_cast<int>((*cloud)[i].y + intrinsic_(1, 2));
-        double dx = ((*cloud)[i].x + intrinsic_(0, 2)) - x;
-        double dy = ((*cloud)[i].y + intrinsic_(1, 2)) - y;
+        int x = static_cast<int>((*cloud)[i].x);
+        int y = static_cast<int>((*cloud)[i].y);
+        double dx = (*cloud)[i].x - x;
+        double dy = (*cloud)[i].y - y;
 
-        if (x >= 0 && x < width_ - 1 && y >= 0 && y < height_ - 1)
+        if (x >= -padding && x < width_ + padding - 1 && y >= -padding && y < height_ + padding - 1)
         {
-          double w1 = (1.0 - dx) * (1.0 - dy);
-          double w2 = dx * (1.0 - dy);
-          double w3 = (1.0 - dx) * dy;
           double w4 = dx * dy;
-          warped_image.at<double>(y, x) += polarity_[i] * w1;
-          warped_image.at<double>(y, x + 1) += polarity_[i] * w2;
-          warped_image.at<double>(y + 1, x) += polarity_[i] * w3;
-          warped_image.at<double>(y + 1, x + 1) += polarity_[i] * w4;
+          double w3 = (1.0 - dx) * dy;
+          double w2 = dx * (1.0 - dy);
+          double w1 = (1.0 - dx) * (1.0 - dy);
+
+          warped_image.at<double>(y + padding, x + padding) += w1;
+          warped_image.at<double>(y + padding, x + 1 + padding) += w2;
+          warped_image.at<double>(y + padding + 1, x + padding) += w3;
+          warped_image.at<double>(y + padding + 1, x + 1 + padding) += w4;
         }
       }
       // 平滑翘曲图像
       cv::GaussianBlur(warped_image, warped_image, cv::Size(3, 3), 1.0);
+      // 计算梯度图像
+      cv::Mat grad_x, grad_y;
+      cv::Sobel(warped_image, grad_x, CV_64F, 1, 0, 3);
+      cv::Sobel(warped_image, grad_y, CV_64F, 0, 1, 3);
       // 计算残差（方差）
       double mean = cv::mean(warped_image)[0];
       double var = 0.0;
@@ -102,24 +110,29 @@ namespace spatiotemporal_vo
       {
         for (int c = 0; c < warped_image.cols; ++c)
         {
-          double val = warped_image.at<double>(r, c);
-          var += val * val;
+          double temp = warped_image.at<double>(r, c);
+          var += temp * temp;
         }
       }
-      var = var / (width_ * height_) - mean * mean;
+      var = var / (warped_image.rows * warped_image.cols) - mean * mean;
       cost[0] = -var;
 
       // 构建KD树
       pcl::KdTreeFLANN<pcl::PointXY> kdtree;
       kdtree.setInputCloud(cloud);
 
-      const float radius = 3.0f;
-
+      const float radius = 4.0f;
+      gradient[0] = 0.0;
+      gradient[1] = 0.0;
+      gradient[2] = 0.0;
       for (int k = 0; k < n_points; ++k)
       {
         std::vector<int> neighbor_indices;
         std::vector<float> neighbor_dists;
+
         pcl::PointXY search_point = (*cloud)[k];
+        auto k1 = (*cloud)[k].x - intrinsic_(0, 2);
+        auto k2 = (*cloud)[k].y - intrinsic_(1, 2);
         // 半径搜索
         kdtree.radiusSearch(search_point, radius, neighbor_indices, neighbor_dists);
 
@@ -129,11 +142,9 @@ namespace spatiotemporal_vo
           if (l == k)
             continue;
           float dist2 = neighbor_dists[idx];
-          double weight = std::exp(-dist2 * dist2 / 4.0) * delta_time_[k];
-          auto k1 = points_[k](0);
-          auto k2 = points_[k](1);
-          auto l1 = points_[l](0);
-          auto l2 = points_[l](1);
+          double weight = 0.079577 * std::exp(-dist2 * dist2 / 4.0) * delta_time_[k];
+          auto l1 = (*cloud)[l].x - intrinsic_(0, 2);
+          auto l2 = (*cloud)[l].y - intrinsic_(1, 2);
           gradient[0] += weight * ((intrinsic_(1, 1) + k2 * k2 / intrinsic_(1, 1)) * (-k2 + l2) + k1 * k2 * (-k1 + l1) / intrinsic_(1, 1));
           gradient[1] += weight * ((-intrinsic_(0, 0) - k1 * k1 / intrinsic_(0, 0)) * (-k1 + l1) - k1 * k2 * (-k2 + l2) / intrinsic_(0, 0));
           gradient[2] += weight * (-k1 * (-k2 + l2) + k2 * (-k1 + l1));
@@ -142,6 +153,21 @@ namespace spatiotemporal_vo
       gradient[0] /= n_points;
       gradient[1] /= n_points;
       gradient[2] /= n_points;
+      // for (int k = 0; k < n_points; ++k)
+      // {
+      //   double x = (*cloud)[k].x + intrinsic_(0, 2);
+      //   double y = (*cloud)[k].y + intrinsic_(1, 2);
+      //   if (x < 0 || x >= width_ || y < 0 || y >= height_)
+      //     continue;
+      //   double dx = grad_x.at<double>(static_cast<int>(y), static_cast<int>(x)) * 2 * delta_time_[k];
+      //   double dy = grad_y.at<double>(static_cast<int>(y), static_cast<int>(x)) * 2 * delta_time_[k];
+      //   auto k1 = x - intrinsic_(0, 2);
+      //   auto k2 = y - intrinsic_(1, 2);
+      //   gradient[0] += dx * k1 * k2 / intrinsic_(1, 1) + dy * (intrinsic_(1, 1) + pow(k2, 2) / intrinsic_(1, 1));
+      //   gradient[1] += dx * (-intrinsic_(0, 0) - pow(k1, 2) / intrinsic_(0, 0)) - dy * k1 * k2 / intrinsic_(0, 0);
+      //   gradient[2] += dx * k2 - dy * k1;
+      // }
+      std::cout << "cost: " << cost[0] << " grad: " << gradient[0] << " " << gradient[1] << " " << gradient[2] << std::endl;
       return true;
     }
 
@@ -226,7 +252,7 @@ namespace spatiotemporal_vo
     ceres::GradientProblemSolver::Options options;
     options.minimizer_progress_to_stdout = true;
     options.line_search_direction_type = ceres::BFGS; // 推荐用于通用优化
-    options.max_num_iterations = 100;
+    options.max_num_iterations = 10;
 
     ceres::GradientProblemSolver::Summary summary;
 
