@@ -99,22 +99,10 @@ namespace spatiotemporal_vo
       }
       // 平滑翘曲图像
       cv::GaussianBlur(warped_image, warped_image, cv::Size(3, 3), 1.0);
-      // 计算梯度图像
-      cv::Mat grad_x, grad_y;
-      cv::Sobel(warped_image, grad_x, CV_64F, 1, 0, 3);
-      cv::Sobel(warped_image, grad_y, CV_64F, 0, 1, 3);
       // 计算残差（方差）
-      double mean = cv::mean(warped_image)[0];
-      double var = 0.0;
-      for (int r = 0; r < warped_image.rows; ++r)
-      {
-        for (int c = 0; c < warped_image.cols; ++c)
-        {
-          double temp = warped_image.at<double>(r, c);
-          var += temp * temp;
-        }
-      }
-      var = var / (warped_image.rows * warped_image.cols) - mean * mean;
+      cv::Scalar mean, stddev;
+      cv::meanStdDev(warped_image, mean, stddev);
+      double var = stddev[0] * stddev[0];
       cost[0] = -var;
 
       // 构建KD树
@@ -167,7 +155,6 @@ namespace spatiotemporal_vo
       //   gradient[1] += dx * (-intrinsic_(0, 0) - pow(k1, 2) / intrinsic_(0, 0)) - dy * k1 * k2 / intrinsic_(0, 0);
       //   gradient[2] += dx * k2 - dy * k1;
       // }
-      std::cout << "cost: " << cost[0] << " grad: " << gradient[0] << " " << gradient[1] << " " << gradient[2] << std::endl;
       return true;
     }
 
