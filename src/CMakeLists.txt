@@ -14,6 +14,7 @@ target_link_libraries(event_camera_vo
       Sophus::Sophus
       ${CERES_LIBRARIES}
       Eigen3::Eigen
+      ${OpenMP_CXX_LIBRARIES}
 )
 
 # 设置头文件包含路径

@@ -9,6 +9,7 @@ function(add_test_executable TARGET_NAME SOURCE_FILE)
             Sophus::Sophus
             ${CERES_LIBRARIES}
             Eigen3::Eigen
+            ${OpenMP_CXX_LIBRARIES}
     )
     # 可执行文件会自动输出到 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} (build/bin)
 endfunction()

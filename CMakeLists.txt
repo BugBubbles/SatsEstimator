@@ -29,6 +29,8 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
+# 5. OpenMP
+find_package(OpenMP REQUIRED)
 # --- 包含目录 ---
 include_directories(include)
 

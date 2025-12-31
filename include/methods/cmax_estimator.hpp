@@ -112,5 +112,6 @@ namespace spatiotemporal_vo
      * @return 损失函数值
      */
     double optimizeMotion();
+    double optimizeMotionIpopt();
   };
 } // namespace spatiotemporal_vo
