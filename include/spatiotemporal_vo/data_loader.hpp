@@ -7,16 +7,18 @@
 #include <Eigen/Core>
 #include <fstream>
 
-namespace spatiotemporal_vo {
+namespace spatiotemporal_vo
+{
 
-/**
- * @brief 事件数据结构
- */
-struct EventPacket {
-    std::vector<Eigen::Vector2d> xy;    // 事件坐标
-    std::vector<double> t;               // 时间戳
-    std::vector<int> polarity;           // 极性 (1 或 -1)
-    
+  /**
+   * @brief 事件数据结构
+   */
+  struct EventPacket
+  {
+    std::vector<Eigen::Vector2d> xy; // 事件坐标
+    std::vector<double> t;           // 时间戳
+    std::vector<int> polarity;       // 极性 (1 或 -1)
+
     size_t size() const { return xy.size(); }
     bool empty() const { return xy.empty(); }
     double timespan() const { return t.back() - t.front(); };
@@ -26,38 +28,40 @@ struct EventPacket {
       t.clear();
       polarity.clear();
     }
-};
+  };
 
-/**
- * @brief 事件数据加载器
- */
-class DataLoader {
-public:
+  /**
+   * @brief 事件数据加载器
+   */
+  class DataLoader
+  {
+  public:
     DataLoader();
-    explicit DataLoader(const std::string& data_root);
+    explicit DataLoader(const std::string &data_root);
 
     /**
      * @brief 加载事件数据文件，仅懒加载
      * @param filepath 事件文件路径
      * @return 是否加载成功
      */
-    bool loadEvents(const std::string& filepath);
+    bool loadEvents(const std::string &filepath);
 
     /**
      * @brief 加载真值轨迹文件
      * @param filepath 真值文件路径
      * @return 是否加载成功
      */
-    bool loadGroundTruth(const std::string& filepath);
+    bool loadGroundTruth(const std::string &filepath);
 
     /**
      * @brief 获取指定时间窗口，或指定个数的事件
      * @param t_start 起始时间
      * @param t_end 结束时间
      * @param event_count 事件个数
+     * @param select_num 挑选的事件个数
      * @return 事件数据包
      */
-    EventPacket getEventsInWindow(double t_start, double t_end, int event_count);
+    EventPacket getEventsInWindow(double t_start, double t_end, int event_count, int select_num = 0);
 
     /**
      * @brief 检查是否还有数据
@@ -73,8 +77,8 @@ public:
 
     /*
      * @brief 事件点去畸变
-     * @param 
-    */
+     * @param
+     */
     void undistortEvents(EventPacket &packet, const CameraConfig &cam_cfg);
 
   private:
@@ -84,6 +88,6 @@ public:
     std::vector<SE3> gt_poses_;
     size_t current_index_;
     double current_time_;
-};
+  };
 
 } // namespace spatiotemporal_vo

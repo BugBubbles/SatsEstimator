@@ -74,7 +74,7 @@ namespace spatiotemporal_vo
     return !gt_poses_.empty();
   }
 
-  EventPacket DataLoader::getEventsInWindow(double t_start, double t_end, int event_count)
+  EventPacket DataLoader::getEventsInWindow(double t_start, double t_end, int event_count, int select_num)
   {
     EventPacket packet;
     std::string line;
@@ -122,6 +122,33 @@ namespace spatiotemporal_vo
         }
       }
     }
+    // if (select_num > 0)
+    // {
+    //   if (static_cast<int>(packet.t.size()) > select_num)
+    //   {
+    //     EventPacket trimmed_packet;
+    //     int total = packet.t.size();
+    //     std::vector<int> indices(total);
+    //     std::iota(indices.begin(), indices.end(), 0);
+
+    //     // 随机打乱索引
+    //     std::random_device rd;
+    //     std::mt19937 gen(rd());
+    //     std::shuffle(indices.begin(), indices.end(), gen);
+
+    //     // 取前select_num个索引并排序（保证输出顺序与原始一致）
+    //     indices.resize(select_num);
+    //     std::sort(indices.begin(), indices.end());
+
+    //     for (int idx : indices)
+    //     {
+    //       trimmed_packet.t.push_back(packet.t[idx]);
+    //       trimmed_packet.xy.push_back(packet.xy[idx]);
+    //       trimmed_packet.polarity.push_back(packet.polarity[idx]);
+    //     }
+    //     packet = std::move(trimmed_packet);
+    //   }
+    // }
 
     return packet;
   }

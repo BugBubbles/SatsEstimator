@@ -175,7 +175,7 @@ namespace spatiotemporal_vo
     void MainOptimize()
     {
       // 使用牛顿法进行优化
-      const int max_iterations = 20;
+      const int max_iterations = 40;
       const double tolerance = 1e-3;
       Eigen::Matrix3d hessian;
       Vec3 gradient;
@@ -199,10 +199,10 @@ namespace spatiotemporal_vo
         {
           break;
         }
-#ifdef DEBUG
-        std::cout << "Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
-        std::cout << "Estimated Parameters: " << est_angleAxis_.transpose() << std::endl;
-#endif
+// #ifdef DEBUG
+//         std::cout << "Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
+//         std::cout << "Estimated Parameters: " << est_angleAxis_.transpose() << std::endl;
+// #endif
       }
       // 计算最终损失
       compute_loss(est_angleAxis_, final_loss_);

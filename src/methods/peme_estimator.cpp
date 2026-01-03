@@ -118,8 +118,8 @@ namespace spatiotemporal_vo
     // 从配置中加载参数
     params_.ts_start = 0.8;
     params_.ts_end = 0.8;
-    params_.sample_count = 30000;
-    params_.iter_num = 10;
+    params_.sample_count = 1000;
+    params_.iter_num = 50;
     params_.ceres_iter_num = 10;
     params_.ceres_iter_thread = 8;
     params_.gaussian_size = 5;
@@ -183,6 +183,7 @@ namespace spatiotemporal_vo
     int n = eventBundle_.size;
 
     warped_bundle.coord.resize(n);
+    warped_bundle.coord_3d.resize(n);
     warped_bundle.isInner.resize(n);
     warped_bundle.size = n;
 
@@ -253,7 +254,7 @@ namespace spatiotemporal_vo
       cv_later_timesurface.setTo(later_default_value * params_.default_value_factor);
 
       // 获取 warp 后的事件图像
-      getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_);
+      // getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_);
 
       // 构建 earlier 时间表面
       for (int i = static_cast<int>(event_warpped_Bundle_.size * timesurface_range); i >= 0; --i)
@@ -268,7 +269,7 @@ namespace spatiotemporal_vo
       }
 
       // 获取 later 时间表面
-      getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_, true);
+      // getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_, true);
 
       for (int i = static_cast<int>(event_warpped_Bundle_.size * (1 - timesurface_range));
            i < event_warpped_Bundle_.size; ++i)

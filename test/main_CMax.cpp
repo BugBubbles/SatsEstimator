@@ -49,7 +49,7 @@ int main(int argc, char **argv)
   {
     // 获取一批事件
     EventPacket events = data_loader.getEventsInWindow(t_start, t_start + config.data.time_window,
-                                                       config.data.event_count);
+                                                       config.data.event_count, 5000);
     // 去除畸变
     data_loader.undistortEvents(events, config.camera);
 
