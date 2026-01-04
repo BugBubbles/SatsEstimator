@@ -19,12 +19,13 @@ namespace spatiotemporal_vo
     // 配置参数结构体
     struct PEMEParams
     {
-      double ts_start = 0.2;             // 时间表面起始比例
-      double ts_end = 0.8;               // 时间表面结束比例
-      int sample_count = 1000;           // 采样点数量
-      int iter_num = 50;                 // 外层迭代次数
-      int ceres_iter_num = 10;           // Ceres 内部迭代次数
-      int ceres_iter_thread = 4;         // Ceres 线程数
+      double ts_start = 0.2;     // 时间表面起始比例
+      double ts_end = 0.8;       // 时间表面结束比例
+      int sample_count = 1000;   // 采样点数量
+      int iter_num = 50;         // 外层迭代次数
+      int ceres_iter_num = 10;   // Ceres 内部迭代次数
+      int ceres_iter_thread = 4; // Ceres 线程数
+      int denoise_num = 3;
       int gaussian_size = 5;             // 高斯模糊核大小
       float gaussian_sigma = 1.0f;       // 高斯模糊 sigma
       float default_value_factor = 1.5f; // 默认值因子
@@ -37,7 +38,7 @@ namespace spatiotemporal_vo
      * @param config 配置对象
      */
     PEMEPlusEstimator(double fx, double fy, double cx, double cy,
-                  int width, int height, const Config &config);
+                      int width, int height, const Config &config);
 
     ~PEMEPlusEstimator() = default;
 
@@ -66,7 +67,7 @@ namespace spatiotemporal_vo
   private:
     // 相机内参矩阵
     Eigen::Matrix3d K_;
-    int width_, height_;
+    int width_, height_, padding_ = 100;
 
     // 参数
     PEMEParams params_;
@@ -104,7 +105,8 @@ namespace spatiotemporal_vo
     /**
      * @brief 获取采样索引
      */
-    void getSampledIndices(std::vector<int> &indices, int count,
+    void getSampledIndices(const cv::Mat &iwe,
+                           std::vector<int> &indices, int count,
                            double start_ratio, double end_ratio);
 
     /**

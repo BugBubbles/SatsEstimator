@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
-#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <ceres/ceres.h>
 #include <ceres/cubic_interpolation.h>
@@ -18,6 +18,7 @@ namespace spatiotemporal_vo
   {
     PEMEResidualCostFunction(
         const Vec3 &point,
+        const int padding,
         double delta_time_early,
         double delta_time_later,
         const Eigen::Matrix3d &K,
@@ -25,6 +26,7 @@ namespace spatiotemporal_vo
         ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_later_ptr,
         const Vec3 &last_est_var)
         : point_(point),
+          padding_(padding),
           delta_time_early_(delta_time_early),
           delta_time_later_(delta_time_later),
           intrinsic_(K),
@@ -72,29 +74,16 @@ namespace spatiotemporal_vo
 
       // 插值获取残差
       T early_loss = T(0), later_loss = T(0);
-      interpolator_early_ptr_->Evaluate(points_2D_early_T(1), points_2D_early_T(0), &early_loss);
-      interpolator_later_ptr_->Evaluate(points_2D_later_T(1), points_2D_later_T(0), &later_loss);
+      interpolator_early_ptr_->Evaluate(points_2D_early_T(1) + T(padding_), points_2D_early_T(0) + T(padding_), &early_loss);
+      interpolator_later_ptr_->Evaluate(points_2D_later_T(1) + T(padding_), points_2D_later_T(0) + T(padding_), &later_loss);
 
       residual[0] = early_loss + later_loss;
 
       return true;
     }
 
-    static ceres::CostFunction *OptimizeCeres(
-        const Vec3 &point,
-        double delta_time_early,
-        double delta_time_later,
-        const Eigen::Matrix3d &K,
-        ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_early_ptr,
-        ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_later_ptr,
-        const Vec3 &last_est_var)
-    {
-      return new ceres::AutoDiffCostFunction<PEMEResidualCostFunction, 1, 3>(
-          new spatiotemporal_vo::PEMEResidualCostFunction(point, delta_time_early, delta_time_later, K,
-                                                          interpolator_early_ptr, interpolator_later_ptr, last_est_var));
-    }
-
     Vec3 point_;
+    int padding_;
     double delta_time_early_, delta_time_later_;
     Eigen::Matrix3d intrinsic_;
     ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_early_ptr_;
@@ -118,8 +107,8 @@ namespace spatiotemporal_vo
     // 从配置中加载参数
     params_.ts_start = 0.8;
     params_.ts_end = 0.8;
-    params_.sample_count = 1000;
-    params_.iter_num = 50;
+    params_.sample_count = 30000;
+    params_.iter_num = 10;
     params_.ceres_iter_num = 10;
     params_.ceres_iter_thread = 8;
     params_.gaussian_size = 5;
@@ -146,40 +135,46 @@ namespace spatiotemporal_vo
     }
   }
 
-  void PEMEEstimator::getSampledIndices(std::vector<int> &indices, int count,
-                                        double start_ratio, double end_ratio)
+  void PEMEEstimator::getSampledIndices(const cv::Mat &iwe, std::vector<int> &vec_sampled_idx, int samples_count,
+                                        double sample_start, double sample_end)
   {
-    int start_idx = static_cast<int>(eventBundle_.size * start_ratio);
-    int end_idx = static_cast<int>(eventBundle_.size * end_ratio);
-    int range = end_idx - start_idx;
-
-    if (range <= 0 || count <= 0)
+    cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
+    // get samples, filtered out noise
+    for (int i = 0; i < samples_count;)
     {
-      indices.clear();
-      return;
+      int sample_idx = rng.uniform(int(event_warpped_Bundle_.size * sample_start), int(event_warpped_Bundle_.size * sample_end));
+
+      // check valid 8 neighbor hood existed
+      int sampled_x = event_warpped_Bundle_.coord[sample_idx].x();
+      int sampled_y = event_warpped_Bundle_.coord[sample_idx].y();
+      if (sampled_x >= width_ - 1 || sampled_x < 1 || sampled_y >= height_ - 1 || sampled_y < 1)
+      {
+        // cout << "x, y" << sampled_x << "," << sampled_y << endl;
+        continue;
+      }
+
+      int count = iwe.at<int>(sampled_y, sampled_x);
+      // int count = 0;
+      // for (int j = -1; j < 2; j++)
+      //   for (int k = -1; k < 2; k++)
+      //   {
+      //     count += iwe.at<cv::Vec3f>(sampled_y + j, sampled_x + k)[0] > 0
+      //   }
+
+      // valid denoised
+      if (count > params_.denoise_num) // TODO
+      {
+        vec_sampled_idx.push_back(sample_idx);
+        i++;
+      }
     }
-
-    count = std::min(count, range);
-    indices.resize(count);
-
-    // 随机采样
-    std::vector<int> all_indices(range);
-    std::iota(all_indices.begin(), all_indices.end(), start_idx);
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::shuffle(all_indices.begin(), all_indices.end(), gen);
-
-    std::copy(all_indices.begin(), all_indices.begin() + count, indices.begin());
-    std::sort(indices.begin(), indices.end());
   }
-
   cv::Mat PEMEEstimator::getWarpedEventImage(const Vec3 &angularVelocity,
                                              EventBundle &warped_bundle,
                                              bool use_later_time)
   {
     // 创建三通道16位无符号整型图像
-    cv::Mat image = cv::Mat::zeros(height_, width_, CV_16UC3);
+    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16UC3);
     int n = eventBundle_.size;
 
     warped_bundle.coord.resize(n);
@@ -207,12 +202,13 @@ namespace spatiotemporal_vo
       // 检查是否在图像内
       int xi = static_cast<int>(std::round(x));
       int yi = static_cast<int>(std::round(y));
-      warped_bundle.isInner[i] = (xi >= 0 && xi < width_ && yi >= 0 && yi < height_);
 
-      if (warped_bundle.isInner[i])
+      if (xi >= -padding_ && xi < width_ + padding_ - 1 &&
+          yi >= -padding_ && yi < height_ + padding_ - 1)
       {
+        warped_bundle.isInner[i] = true;
         // 获取指向该像素的三通道指针
-        uint16_t *pixel = image.ptr<uint16_t>(yi, xi);
+        uint16_t *pixel = image.ptr<uint16_t>(yi + padding_, xi + padding_);
         if (eventBundle_.polarity[i] > 0)
         {
           pixel[0] += 1; // 正事件加到第一个通道
@@ -233,7 +229,10 @@ namespace spatiotemporal_vo
     double angleAxis[3] = {est_angleAxis_(0), est_angleAxis_(1), est_angleAxis_(2)};
     double best_loss = std::numeric_limits<double>::max();
     best_angleAxis_ = est_angleAxis_;
-
+    // 获取 warp 后的事件图像
+    cv::Mat iwe = getWarpedEventImage(est_angleAxis_, event_warpped_Bundle_);
+    // 对 iwe 也进行卷积，将3x3领域内的值进行加和
+    cv::boxFilter(iwe, iwe, iwe.depth(), cv::Size(3, 3), cv::Point(-1, -1), false);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec3 eg_angleAxis(angleAxis[0], angleAxis[1], angleAxis[2]);
@@ -243,8 +242,8 @@ namespace spatiotemporal_vo
                                  iter / static_cast<double>(params_.iter_num) * (params_.ts_end - params_.ts_start);
 
       // 初始化时间表面
-      cv::Mat cv_earlier_timesurface = cv::Mat(height_, width_, CV_32FC1);
-      cv::Mat cv_later_timesurface = cv::Mat(height_, width_, CV_32FC1);
+      cv::Mat cv_earlier_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_32F);
+      cv::Mat cv_later_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_32F);
 
       float early_default_value = eventBundle_.time_delta[static_cast<int>(eventBundle_.size * timesurface_range)];
       cv_earlier_timesurface.setTo(early_default_value * params_.default_value_factor);
@@ -254,7 +253,7 @@ namespace spatiotemporal_vo
       cv_later_timesurface.setTo(later_default_value * params_.default_value_factor);
 
       // 获取 warp 后的事件图像
-      // getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_);
+      getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_);
 
       // 构建 earlier 时间表面
       for (int i = static_cast<int>(event_warpped_Bundle_.size * timesurface_range); i >= 0; --i)
@@ -265,11 +264,11 @@ namespace spatiotemporal_vo
         if (!event_warpped_Bundle_.isInner[i])
           continue;
 
-        cv_earlier_timesurface.at<float>(sampled_y, sampled_x) = eventBundle_.time_delta[i];
+        cv_earlier_timesurface.at<float>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta[i];
       }
 
       // 获取 later 时间表面
-      // getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_, true);
+      getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_, true);
 
       for (int i = static_cast<int>(event_warpped_Bundle_.size * (1 - timesurface_range));
            i < event_warpped_Bundle_.size; ++i)
@@ -280,7 +279,7 @@ namespace spatiotemporal_vo
         if (!event_warpped_Bundle_.isInner[i])
           continue;
 
-        cv_later_timesurface.at<float>(sampled_y, sampled_x) =
+        cv_later_timesurface.at<float>(sampled_y + padding_, sampled_x + padding_) =
             eventBundle_.time_delta.back() - eventBundle_.time_delta[i];
       }
 
@@ -296,20 +295,20 @@ namespace spatiotemporal_vo
       // 转换为 Ceres 插值器
       std::vector<float> line_grid_early(
           reinterpret_cast<float *>(cv_earlier_timesurface_blur.data),
-          reinterpret_cast<float *>(cv_earlier_timesurface_blur.data) + height_ * width_);
+          reinterpret_cast<float *>(cv_earlier_timesurface_blur.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
       std::vector<float> line_grid_later(
           reinterpret_cast<float *>(cv_later_timesurface_blur.data),
-          reinterpret_cast<float *>(cv_later_timesurface_blur.data) + height_ * width_);
+          reinterpret_cast<float *>(cv_later_timesurface_blur.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
 
-      ceres::Grid2D<float, 1> grid_early(line_grid_early.data(), 0, height_, 0, width_);
-      ceres::Grid2D<float, 1> grid_later(line_grid_later.data(), 0, height_, 0, width_);
+      ceres::Grid2D<float, 1> grid_early(line_grid_early.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> grid_later(line_grid_later.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
       auto interpolator_early_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_early);
       auto interpolator_later_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_later);
 
       // 采样
       std::vector<int> vec_sampled_idx;
       int samples_count = std::min(params_.sample_count, eventBundle_.size);
-      getSampledIndices(vec_sampled_idx, samples_count, 0.0, 1.0);
+      getSampledIndices(iwe, vec_sampled_idx, samples_count, 0.0, 1.0);
 
       // 构建 Ceres 问题
       ceres::Problem problem;
@@ -319,13 +318,14 @@ namespace spatiotemporal_vo
         double early_time = eventBundle_.time_delta[sample_idx];
         double later_time = eventBundle_.time_delta[sample_idx] - eventBundle_.time_delta.back();
 
-        ceres::CostFunction *cost_function = PEMEResidualCostFunction::OptimizeCeres(
-            event_undis_Bundle_.coord_3d[sample_idx],
-            early_time, later_time,
-            K_,
-            interpolator_early_ptr.get(),
-            interpolator_later_ptr.get(),
-            last_est_var_);
+        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMEResidualCostFunction, 1, 3>(
+            new spatiotemporal_vo::PEMEResidualCostFunction(event_undis_Bundle_.coord_3d[sample_idx],
+                                                            padding_,
+                                                            early_time, later_time,
+                                                            K_,
+                                                            interpolator_early_ptr.get(),
+                                                            interpolator_later_ptr.get(),
+                                                            last_est_var_));
 
         problem.AddResidualBlock(cost_function, nullptr, angleAxis);
       }

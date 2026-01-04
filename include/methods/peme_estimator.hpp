@@ -23,6 +23,7 @@ namespace spatiotemporal_vo
       double ts_end = 0.8;               // 时间表面结束比例
       int sample_count = 1000;           // 采样点数量
       int iter_num = 50;                 // 外层迭代次数
+      int denoise_num = 3;               // 去噪邻域阈值
       int ceres_iter_num = 10;           // Ceres 内部迭代次数
       int ceres_iter_thread = 4;         // Ceres 线程数
       int gaussian_size = 5;             // 高斯模糊核大小
@@ -66,7 +67,7 @@ namespace spatiotemporal_vo
   private:
     // 相机内参矩阵
     Eigen::Matrix3d K_;
-    int width_, height_;
+    int width_, height_, padding_ = 100;
 
     // 参数
     PEMEParams params_;
@@ -104,7 +105,8 @@ namespace spatiotemporal_vo
     /**
      * @brief 获取采样索引
      */
-    void getSampledIndices(std::vector<int> &indices, int count,
+    void getSampledIndices(const cv::Mat &iwe,
+                           std::vector<int> &indices, int count,
                            double start_ratio, double end_ratio);
 
     /**
