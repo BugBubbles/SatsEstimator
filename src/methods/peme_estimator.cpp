@@ -107,7 +107,7 @@ namespace spatiotemporal_vo
     // 从配置中加载参数
     params_.ts_start = 0.8;
     params_.ts_end = 0.8;
-    params_.sample_count = 30000;
+    params_.sample_count = 1000;
     params_.iter_num = 10;
     params_.ceres_iter_num = 10;
     params_.ceres_iter_thread = 8;
@@ -131,50 +131,76 @@ namespace spatiotemporal_vo
       double x = (xy[i](0) - cx) / fx;
       double y = (xy[i](1) - cy) / fy;
       coord_3d[i] = Vec3(x, y, depth.empty() ? 1.0 : depth[i]);
-      coord_3d[i].normalize();
     }
   }
 
-  void PEMEEstimator::getSampledIndices(const cv::Mat &iwe, std::vector<int> &vec_sampled_idx, int samples_count,
-                                        double sample_start, double sample_end)
+  void PEMEEstimator::getSampledIndices(const cv::Mat &iwe, std::vector<int> &indices, int count,
+                                        double start_ratio, double end_ratio)
   {
-    cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
-    // get samples, filtered out noise
-    for (int i = 0; i < samples_count;)
+    int start_idx = static_cast<int>(eventBundle_.size * start_ratio);
+    int end_idx = static_cast<int>(eventBundle_.size * end_ratio);
+    int range = end_idx - start_idx;
+
+    if (range <= 0 || count <= 0)
     {
-      int sample_idx = rng.uniform(int(event_warpped_Bundle_.size * sample_start), int(event_warpped_Bundle_.size * sample_end));
-
-      // check valid 8 neighbor hood existed
-      int sampled_x = event_warpped_Bundle_.coord[sample_idx].x();
-      int sampled_y = event_warpped_Bundle_.coord[sample_idx].y();
-      if (sampled_x >= width_ - 1 || sampled_x < 1 || sampled_y >= height_ - 1 || sampled_y < 1)
-      {
-        // cout << "x, y" << sampled_x << "," << sampled_y << endl;
-        continue;
-      }
-
-      int count = iwe.at<int>(sampled_y, sampled_x);
-      // int count = 0;
-      // for (int j = -1; j < 2; j++)
-      //   for (int k = -1; k < 2; k++)
-      //   {
-      //     count += iwe.at<cv::Vec3f>(sampled_y + j, sampled_x + k)[0] > 0
-      //   }
-
-      // valid denoised
-      if (count > params_.denoise_num) // TODO
-      {
-        vec_sampled_idx.push_back(sample_idx);
-        i++;
-      }
+      indices.clear();
+      return;
     }
+
+    count = std::min(count, range);
+    indices.resize(count);
+
+    // 随机采样
+    std::vector<int> all_indices(range);
+    std::iota(all_indices.begin(), all_indices.end(), start_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(all_indices.begin(), all_indices.end(), gen);
+
+    std::copy(all_indices.begin(), all_indices.begin() + count, indices.begin());
+    std::sort(indices.begin(), indices.end());
+    // cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
+    // // get samples, filtered out noise
+    // for (int i = 0; i < samples_count;)
+    // {
+    //   int sample_idx = rng.uniform(int(event_warpped_Bundle_.size * sample_start), int(event_warpped_Bundle_.size * sample_end));
+
+    //   // check valid 8 neighbor hood existed
+    //   int sampled_x = event_warpped_Bundle_.coord[sample_idx].x();
+    //   int sampled_y = event_warpped_Bundle_.coord[sample_idx].y();
+    //   if (sampled_x >= width_ - 1 || sampled_x < 1 || sampled_y >= height_ - 1 || sampled_y < 1)
+    //   {
+    //     // cout << "x, y" << sampled_x << "," << sampled_y << endl;
+    //     continue;
+    //   }
+
+    //   int count = iwe.at<int>(sampled_y, sampled_x);
+    //   // int count = 0;
+    //   // for (int j = -1; j < 2; j++)
+    //   //   for (int k = -1; k < 2; k++)
+    //   //   {
+    //   //     count += iwe.at<cv::Vec3f>(sampled_y + j, sampled_x + k)[0] > 0
+    //   //   }
+
+    //   // valid denoised
+    //   if (count > params_.denoise_num) // TODO
+    //   {
+    //     vec_sampled_idx.push_back(sample_idx);
+    //     i++;
+    //   }
+    // }
   }
   cv::Mat PEMEEstimator::getWarpedEventImage(const Vec3 &angularVelocity,
                                              EventBundle &warped_bundle,
                                              bool use_later_time)
   {
+        warped_bundle.coord.clear();
+    warped_bundle.coord_3d.clear();
+    warped_bundle.isInner.clear();
+    warped_bundle.size = 0;
     // 创建三通道16位无符号整型图像
-    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16UC3);
+    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_32FC3);
     int n = eventBundle_.size;
 
     warped_bundle.coord.resize(n);
@@ -208,14 +234,14 @@ namespace spatiotemporal_vo
       {
         warped_bundle.isInner[i] = true;
         // 获取指向该像素的三通道指针
-        uint16_t *pixel = image.ptr<uint16_t>(yi + padding_, xi + padding_);
+        float *pixel = image.ptr<float>(yi + padding_, xi + padding_);
         if (eventBundle_.polarity[i] > 0)
         {
-          pixel[0] += 1; // 正事件加到第一个通道
+          pixel[0] += 1.0; // 正事件加到第一个通道
         }
         else
         {
-          pixel[2] += 1; // 负事件加到第三个通道
+          pixel[2] += 1.0; // 负事件加到第三个通道
         }
         // pixel[1] 保持不变
       }
@@ -232,7 +258,7 @@ namespace spatiotemporal_vo
     // 获取 warp 后的事件图像
     cv::Mat iwe = getWarpedEventImage(est_angleAxis_, event_warpped_Bundle_);
     // 对 iwe 也进行卷积，将3x3领域内的值进行加和
-    cv::boxFilter(iwe, iwe, iwe.depth(), cv::Size(3, 3), cv::Point(-1, -1), false);
+    // cv::boxFilter(iwe, iwe, iwe.depth(), cv::Size(3, 3), cv::Point(-1, -1), false);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec3 eg_angleAxis(angleAxis[0], angleAxis[1], angleAxis[2]);
@@ -258,8 +284,8 @@ namespace spatiotemporal_vo
       // 构建 earlier 时间表面
       for (int i = static_cast<int>(event_warpped_Bundle_.size * timesurface_range); i >= 0; --i)
       {
-        int sampled_x = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](0)));
-        int sampled_y = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](1)));
+        int sampled_x = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](0)));
+        int sampled_y = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](1)));
 
         if (!event_warpped_Bundle_.isInner[i])
           continue;
@@ -273,8 +299,8 @@ namespace spatiotemporal_vo
       for (int i = static_cast<int>(event_warpped_Bundle_.size * (1 - timesurface_range));
            i < event_warpped_Bundle_.size; ++i)
       {
-        int sampled_x = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](0)));
-        int sampled_y = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](1)));
+        int sampled_x = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](0)));
+        int sampled_y = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](1)));
 
         if (!event_warpped_Bundle_.isInner[i])
           continue;
@@ -292,16 +318,8 @@ namespace spatiotemporal_vo
                        cv::Size(params_.gaussian_size, params_.gaussian_size),
                        params_.gaussian_sigma);
 
-      // 转换为 Ceres 插值器
-      std::vector<float> line_grid_early(
-          reinterpret_cast<float *>(cv_earlier_timesurface_blur.data),
-          reinterpret_cast<float *>(cv_earlier_timesurface_blur.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
-      std::vector<float> line_grid_later(
-          reinterpret_cast<float *>(cv_later_timesurface_blur.data),
-          reinterpret_cast<float *>(cv_later_timesurface_blur.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
-
-      ceres::Grid2D<float, 1> grid_early(line_grid_early.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
-      ceres::Grid2D<float, 1> grid_later(line_grid_later.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> grid_early(cv_earlier_timesurface.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> grid_later(cv_later_timesurface.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
       auto interpolator_early_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_early);
       auto interpolator_later_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_later);
 

@@ -85,10 +85,10 @@ namespace spatiotemporal_vo
       interpolator_early_ptr_->Evaluate(points_2D_early_T(1) + T(padding_), points_2D_early_T(0) + T(padding_), &early_loss);
       interpolator_later_ptr_->Evaluate(points_2D_later_T(1) + T(padding_), points_2D_later_T(0) + T(padding_), &later_loss);
 
-      residual[0] = (early_loss + later_loss);
+      // residual[0] = (early_loss + later_loss);
       // residual[0] = (early_loss + later_loss) * (lgamma_jet(iwe_early + T(1)) + lgamma_jet(T(r)) - lgamma_jet(iwe_early + T(r)) - T(r) * ceres::log(T(1 - q)) - iwe_early * ceres::log(T(q)));
-      // residual[0] = (exp(-iwe_early) * early_loss + exp(-iwe_later) * later_loss);
-
+      residual[0] = early_loss + later_loss;
+      residual[1] = 0.1 * iwe_early;
       return true;
     }
     // 高精度 digamma 实现，支持 double、long double，以及 Ceres Jet<T> 的标量部分
@@ -281,6 +281,10 @@ namespace spatiotemporal_vo
                                                  EventBundle &warped_bundle,
                                                  bool use_later_time)
   {
+    warped_bundle.coord.clear();
+    warped_bundle.coord_3d.clear();
+    warped_bundle.isInner.clear();
+    warped_bundle.size = 0;
     // 创建单通道32位浮点图像
     cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_32F);
     int n = eventBundle_.size;
@@ -334,9 +338,9 @@ namespace spatiotemporal_vo
     best_angleAxis_ = est_angleAxis_;
     cv::Mat iwe = getWarpedEventImage(est_angleAxis_, event_warpped_Bundle_);
     // 对 iwe 也进行卷积，将3x3领域内的值进行加和
-    cv::boxFilter(iwe, iwe, -1,
-                  cv::Size(3, 3),
-                  cv::Point(-1, -1), true, cv::BORDER_REPLICATE);
+    cv::Mat kernel = (cv::Mat_<float>(3, 3) << -1, -1, -1,
+                      -1, 8, -1,
+                      -1, -1, -1);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec3 eg_angleAxis(angleAxis[0], angleAxis[1], angleAxis[2]);
@@ -362,8 +366,8 @@ namespace spatiotemporal_vo
       // 构建 earlier 时间表面
       for (int i = static_cast<int>(event_warpped_Bundle_.size * timesurface_range); i >= 0; --i)
       {
-        int sampled_x = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](0)));
-        int sampled_y = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](1)));
+        int sampled_x = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](0)));
+        int sampled_y = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](1)));
 
         if (!event_warpped_Bundle_.isInner[i])
           continue;
@@ -377,8 +381,8 @@ namespace spatiotemporal_vo
       for (int i = static_cast<int>(event_warpped_Bundle_.size * (1 - timesurface_range));
            i < event_warpped_Bundle_.size; ++i)
       {
-        int sampled_x = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](0)));
-        int sampled_y = static_cast<int>(std::round(event_warpped_Bundle_.coord[i](1)));
+        int sampled_x = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](0)));
+        int sampled_y = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](1)));
 
         if (!event_warpped_Bundle_.isInner[i])
           continue;
@@ -401,25 +405,14 @@ namespace spatiotemporal_vo
       cv::GaussianBlur(iwe_later, iwe_later,
                        cv::Size(params_.gaussian_size, params_.gaussian_size),
                        params_.gaussian_sigma);
-
+      // 进行一次卷积，卷积核大小为3x3。中心权重为8，其余各点的权重均为-1
+      cv::filter2D(iwe_early, iwe_early, -1, kernel, cv::Point(-1, -1), 0, cv::BORDER_REPLICATE);
+      cv::filter2D(iwe_later, iwe_later, -1, kernel, cv::Point(-1, -1), 0, cv::BORDER_REPLICATE);
       // 转换为 Ceres 插值器
-      std::vector<float> line_grid_early(
-          reinterpret_cast<float *>(cv_earlier_timesurface_blur.data),
-          reinterpret_cast<float *>(cv_earlier_timesurface_blur.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
-      std::vector<float> line_grid_later(
-          reinterpret_cast<float *>(cv_later_timesurface_blur.data),
-          reinterpret_cast<float *>(cv_later_timesurface_blur.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
-      std::vector<float> line_iwe_early(
-          reinterpret_cast<float *>(iwe_early.data),
-          reinterpret_cast<float *>(iwe_early.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
-      std::vector<float> line_iwe_later(
-          reinterpret_cast<float *>(iwe_later.data),
-          reinterpret_cast<float *>(iwe_later.data) + (height_ + 2 * padding_) * (width_ + 2 * padding_));
-
-      ceres::Grid2D<float, 1> grid_early(line_grid_early.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
-      ceres::Grid2D<float, 1> grid_later(line_grid_later.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
-      ceres::Grid2D<float, 1> iwe_grid_early(line_iwe_early.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
-      ceres::Grid2D<float, 1> iwe_grid_later(line_iwe_later.data(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> grid_early(cv_earlier_timesurface.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> grid_later(cv_later_timesurface.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> iwe_grid_early(iwe_early.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<float, 1> iwe_grid_later(iwe_later.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
       auto interpolator_early_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_early);
       auto interpolator_later_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_later);
       auto iwe_interpolator_early_ptr =
@@ -440,7 +433,7 @@ namespace spatiotemporal_vo
         double early_time = eventBundle_.time_delta[sample_idx];
         double later_time = eventBundle_.time_delta[sample_idx] - eventBundle_.time_delta.back();
 
-        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMEPlusCostFunction, 1, 3>(
+        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMEPlusCostFunction, 2, 3>(
             new PEMEPlusCostFunction(event_undis_Bundle_.coord_3d[sample_idx],
                                      padding_,
                                      early_time, later_time, K_,
