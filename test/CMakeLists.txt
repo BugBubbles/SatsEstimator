@@ -6,7 +6,6 @@ function(add_test_executable TARGET_NAME SOURCE_FILE)
             event_camera_vo
             ${PCL_LIBRARIES}
             ${OpenCV_LIBS}
-            Sophus::Sophus
             ${CERES_LIBRARIES}
             Eigen3::Eigen
             ${OpenMP_CXX_LIBRARIES}

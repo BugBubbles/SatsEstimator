@@ -28,6 +28,7 @@ namespace spatiotemporal_vo
   using Vec3 = Eigen::Vector3d;
   using Vec4 = Eigen::Vector4d;
   using Mat3 = Eigen::Matrix3d;
+  using EigenMat = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
   struct RegistrationStats
   {

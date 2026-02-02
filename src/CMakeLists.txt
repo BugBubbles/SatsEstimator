@@ -11,7 +11,6 @@ target_link_libraries(event_camera_vo
     PUBLIC
       ${PCL_LIBRARIES}
       ${OpenCV_LIBS}
-      Sophus::Sophus
       ${CERES_LIBRARIES}
       Eigen3::Eigen
       ${OpenMP_CXX_LIBRARIES}
