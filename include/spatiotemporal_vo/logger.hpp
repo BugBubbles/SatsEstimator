@@ -15,9 +15,10 @@ namespace spatiotemporal_vo
     /**
      * @brief 初始化日志记录器
      * @param filepath 日志路径
+     * @param method 方法名称前缀
      * @param suffix 日志文件后缀
      */
-    ResultLogger(const std::string &filepath, const std::string &suffix);
+    ResultLogger(const std::string &filepath, const std::string &method, const std::string &suffix);
     /**
      * @brief 获取日志记录器状态
      */
@@ -35,7 +36,7 @@ namespace spatiotemporal_vo
   private:
     std::ofstream log_file_;
     bool is_initialized_;
-    std::string suffix_;
+    std::string suffix_, prefix_;
     bool createDirectory(const std::string &path);
     std::string generateFilename() const;
   };

@@ -39,7 +39,7 @@ int main(int argc, char **argv)
       config);
 
   // 4. 初始化日志记录器
-  ResultLogger logger(config.paths.output_root, config.paths.suffix);
+  ResultLogger logger(config.paths.output_root, "peme", config.paths.suffix);
 
   // 5. 主循环
   int frame_count = 0;

@@ -33,6 +33,7 @@ namespace spatiotemporal_vo
   struct RegistrationStats
   {
     double loss = 0.0;
+    double time_taken = 0.0;
     int num_inliers = 0;
     int num_iterations = 0;
   };

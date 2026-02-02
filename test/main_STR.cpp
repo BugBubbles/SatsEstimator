@@ -36,7 +36,7 @@ int main(int argc, char **argv)
       config);
 
   // 4. 初始化可视化和轨迹记录
-  ResultLogger logger(config.paths.output_root, config.paths.suffix);
+  ResultLogger logger(config.paths.output_root, "str", config.paths.suffix);
 
   // 5. 主循环
   SE3 current_pose; // 初始为单位矩阵

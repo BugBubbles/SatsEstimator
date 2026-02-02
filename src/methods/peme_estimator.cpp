@@ -195,7 +195,7 @@ namespace spatiotemporal_vo
                                              EventBundle &warped_bundle,
                                              bool use_later_time)
   {
-        warped_bundle.coord.clear();
+    warped_bundle.coord.clear();
     warped_bundle.coord_3d.clear();
     warped_bundle.isInner.clear();
     warped_bundle.size = 0;
@@ -226,8 +226,8 @@ namespace spatiotemporal_vo
       warped_bundle.coord[i] = Vec2(x, y);
 
       // 检查是否在图像内
-      int xi = static_cast<int>(std::round(x));
-      int yi = static_cast<int>(std::round(y));
+      int xi = static_cast<int>(std::floor(x));
+      int yi = static_cast<int>(std::floor(y));
 
       if (xi >= -padding_ && xi < width_ + padding_ - 1 &&
           yi >= -padding_ && yi < height_ + padding_ - 1)

@@ -47,13 +47,6 @@ namespace spatiotemporal_vo
     bool loadEvents(const std::string &filepath);
 
     /**
-     * @brief 加载真值轨迹文件
-     * @param filepath 真值文件路径
-     * @return 是否加载成功
-     */
-    bool loadGroundTruth(const std::string &filepath);
-
-    /**
      * @brief 获取指定时间窗口，或指定个数的事件
      * @param t_start 起始时间
      * @param t_end 结束时间
@@ -69,13 +62,6 @@ namespace spatiotemporal_vo
     bool hasNext();
 
     /**
-     * @brief 获取真值位姿
-     * @param timestamp 时间戳
-     * @return 插值后的位姿
-     */
-    SE3 getGroundTruthPose(double timestamp) const;
-
-    /*
      * @brief 事件点去畸变
      * @param
      */
@@ -85,7 +71,6 @@ namespace spatiotemporal_vo
     std::string dataset_path_;
     std::ifstream all_events_;
     std::vector<double> gt_timestamps_;
-    std::vector<SE3> gt_poses_;
     size_t current_index_;
     double current_time_;
   };

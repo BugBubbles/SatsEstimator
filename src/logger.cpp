@@ -8,8 +8,8 @@
 namespace spatiotemporal_vo
 {
 
-  ResultLogger::ResultLogger(const std::string &output_path, const std::string &suffix)
-      : suffix_(suffix), is_initialized_(false)
+  ResultLogger::ResultLogger(const std::string &output_path, const std::string &method, const std::string &suffix)
+      : prefix_(method), suffix_(suffix), is_initialized_(false)
   {
     // 创建输出目录（如果不存在）
     createDirectory(output_path);
@@ -37,12 +37,12 @@ namespace spatiotemporal_vo
       return;
     }
 
-    // 格式: idx time1 time2 loss twist1 twist2 twist3
+    // 格式: idx time1 time2 runtime twist1 twist2 twist3
     log_file_ << std::fixed << output.stats.num_iterations << " "
               << std::setprecision(9)
               << output.timespan.first << " "
               << output.timespan.second << " "
-              << output.stats.loss << " "
+              << output.stats.time_taken << " "
               << output.twist(0) << " "
               << output.twist(1) << " "
               << output.twist(2) << std::endl;
@@ -79,7 +79,7 @@ namespace spatiotemporal_vo
     auto *tm = std::localtime(&now);
 
     std::ostringstream oss;
-    oss << "vo_log_"
+    oss << prefix_ << "_"
         << std::put_time(tm, "%Y%m%d_%H%M%S")
         << "_" << suffix_
         << ".txt";
