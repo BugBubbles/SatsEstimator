@@ -87,81 +87,10 @@ namespace spatiotemporal_vo
 
       // residual[0] = (early_loss + later_loss);
       // residual[0] = (early_loss + later_loss) * (lgamma_jet(iwe_early + T(1)) + lgamma_jet(T(r)) - lgamma_jet(iwe_early + T(r)) - T(r) * ceres::log(T(1 - q)) - iwe_early * ceres::log(T(q)));
-      residual[0] = early_loss + later_loss;
+      // residual[0] = early_loss + later_loss;
+      residual[0] = T(0);
       residual[1] = 0.1 * iwe_early;
       return true;
-    }
-    // 高精度 digamma 实现，支持 double、long double，以及 Ceres Jet<T> 的标量部分
-    template <typename T>
-    static T digamma(T x)
-    {
-      using std::fabs;
-      using std::log;
-      using std::tan;
-
-      const T kEulerMascheroni = T(0.577215664901532860606512090082402431); // γ
-      const T kPi = T(3.141592653589793238462643383279502884);
-
-      // 处理 NaN
-      if (x != x)
-      {
-        return std::numeric_limits<T>::quiet_NaN();
-      }
-
-      // 反射公式处理 x <= 0 的情况：
-      // ψ(x) = ψ(1 - x) + π * cot(π x)
-      if (x <= T(0))
-      {
-        // 检查是否在极点附近（负整数）
-        T frac = x - std::floor(x);
-        if (fabs(frac) < std::numeric_limits<T>::epsilon())
-        {
-          // 极点：digamma 在负整数处发散
-          return std::numeric_limits<T>::quiet_NaN();
-        }
-        return digamma(T(1) - x) + kPi / tan(-kPi * x);
-      }
-
-      T result = T(0);
-
-      // 对于 x < 10，通过递推把 x 推到较大值
-      // ψ(x) = ψ(x+1) - 1/x
-      while (x < T(10))
-      {
-        result -= T(1) / x;
-        x += T(1);
-      }
-
-      // 此时 x >= 10，使用渐近展开
-      T inv = T(1) / x;
-      T inv2 = inv * inv;
-
-      // 渐近展开：
-      // ψ(x) ≈ log(x) - 1/(2x) - 1/(12x^2) + 1/(120x^4) - 1/(252x^6) + ...
-      T series =
-          -inv / T(2) - inv2 / T(12) + inv2 * inv2 / T(120) - inv2 * inv2 * inv2 / T(252);
-
-      result += log(x) + series;
-
-      return result;
-    }
-
-    template <typename T, int N>
-    ceres::Jet<T, N> lgamma_jet(const ceres::Jet<T, N> &x) const
-    {
-      ceres::Jet<T, N> y;
-      y.a = std::lgamma(x.a); // 值
-      T psi = digamma(x.a);   // 导数：d/dx lgamma = digamma
-      for (int i = 0; i < N; ++i)
-      {
-        y.v[i] = psi * x.v[i]; // 链式法则
-      }
-      return y;
-    }
-    template <typename T>
-    T lgamma_jet(const T &x) const
-    {
-      return std::lgamma(x);
     }
 
     double q = 0.39, r = 0.1;

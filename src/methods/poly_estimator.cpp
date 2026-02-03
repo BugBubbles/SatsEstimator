@@ -16,7 +16,8 @@ namespace spatiotemporal_vo
     std::vector<Vec3> points_;
     int width_, height_;
     Eigen::Matrix3d intrinsic_;
-    Eigen::Matrix<double, Eigen::Dynamic, 13, Eigen::RowMajor> iwe_data_;
+    std::vector<EigenMat> iwe_grad_;
+    std::vector<EigenMat> iwe_hess_;
     EigenMat warped_image_, pixel_grad_, pixel_hess_;
     std::vector<double> delta_time_;
     std::vector<int> polarity_;
@@ -28,34 +29,37 @@ namespace spatiotemporal_vo
   public:
     void getEstimatedParams(Vec3 &est_angleAxis) const { est_angleAxis = est_angleAxis_; }
     double getFinalLoss() const { return final_loss_; }
-    PolyOptimizer(const std::vector<Vec3> &points,
-                  const std::vector<double> &delta_time,
-                  const std::vector<int> &polarity,
+    PolyOptimizer(const EventPacket &packet,
                   int width, int height,
                   const Eigen::Matrix3d &K,
                   const Vec3 &initial_angleAxis)
-        : points_(points), delta_time_(delta_time), polarity_(polarity),
+        : points_(packet.coord_3d), delta_time_(packet.t), polarity_(packet.polarity),
           width_(width), height_(height), intrinsic_(K), est_angleAxis_(initial_angleAxis)
     {
       n_points_ = points_.size();
       warped_image_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       pixel_grad_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       pixel_hess_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
-      iwe_data_.resize((height_ + 2 * padding_) * (width_ + 2 * padding_), 13); // 13 channel for 1 loss + 3 grad + 9 hess
+      iwe_grad_.resize(3);
+      iwe_hess_.resize(9);
+      for (int i = 0; i < 3; ++i)
+      {
+        iwe_grad_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      }
+      for (int i = 0; i < 9; ++i)
+      {
+        iwe_hess_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      }
     }
     /**
      * @brief 计算CMax函数对像素的一阶梯度
      */
     void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
     {
-      // CMax函数
-      loss = -(iwe.array() - iwe.mean()).square().mean();
-      grad = -2 * (iwe.array() - iwe.mean()).matrix();
-      hess = -2 * Eigen::MatrixXd::Ones(iwe.rows(), iwe.cols());
       // Ours
-      // loss = -((0.9416 * iwe.array() + (iwe.array() + 0.1).log()).mean());
-      // grad = 0.9416 + 1 / (iwe.array() + 0.1);
-      // hess = -1 / (iwe.array() + 0.1).square();
+      loss = (0.9416 * iwe.array() + (iwe.array() + 0.1).log()).sum() / iwe.sum();
+      grad = 0.9416 + 1 / (iwe.array() + 0.1);
+      hess = -1 / (iwe.array() + 0.1).square();
     }
     /**
      * @brief 计算运动参数对翘曲事件点的梯度
@@ -72,16 +76,48 @@ namespace spatiotemporal_vo
       grad_warp *= dt;
       hess_warp = grad_warp.row(0).transpose() * grad_warp.row(1) + grad_warp.row(1).transpose() * grad_warp.row(0);
     }
-    void compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Eigen::Matrix3d &hessian, bool use_fast)
+    void assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
-      const int pad_width = width_ + 2 * padding_;
-      const int pad_height = height_ + 2 * padding_;
-      const int channels = 13;
-      // 使用 vector 保证内存连续，初始化为 0
-      iwe_data_.setZero();
+      for (int i = 0; i < 3; ++i)
+      {
+        mat_vec[i](y, x) += vec(i);
+      }
+    }
+    void assign_mat(const Eigen::Matrix3d &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
+    {
+      for (int i = 0; i < 3; ++i)
+      {
+        for (int j = 0; j < 3; ++j)
+        {
+          mat_vec[i * 3 + j](y, x) += mat(i, j);
+        }
+      }
+    }
+    void compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Eigen::Matrix3d &hessian)
+    {
+      auto blur_eigen_mat = [&](EigenMat &mat)
+      {
+        // 注意：Eigen是列优先，所以rows是Eigen的cols，cols是Eigen的rows
+        cv::Mat cv_mat(mat.cols(), mat.rows(), CV_64F, mat.data());
+        // 使用与 compute_loss 中相同的模糊参数 (Size(5,5), sigma=1.0)
+        // 这一步对于模拟第一种方法的"Radius Search"至关重要
+        cv::GaussianBlur(cv_mat, cv_mat, cv::Size(5, 5), 1.0);
+      };
       Eigen::Matrix<double, 3, 1> delta_points_T, delta_second_points_T;
       Eigen::Matrix<double, 3, 1> points_T;
-
+      // 创建翘曲事件图像
+      int pad_width = width_ + 2 * padding_;
+      int pad_height = height_ + 2 * padding_;
+      warped_image_.setZero();
+      // 初始化梯度和海森矩阵图像
+      for (int i = 0; i < 3; ++i)
+      {
+        iwe_grad_[i].setZero();
+      }
+      for (int i = 0; i < 9; ++i)
+      {
+        iwe_hess_[i].setZero();
+      }
       double warped_x, warped_y, event_x, event_y;
       Eigen::Matrix<double, 2, 3> grad_warp;
       Eigen::Matrix3d hess_warp;
@@ -120,96 +156,82 @@ namespace spatiotemporal_vo
 
         if (x >= 0 && x < pad_width - 1 && y >= 0 && y < pad_height - 1)
         {
-          double dx = warped_x - x;
-          double dy = warped_y - y;
-          double dx_inv = 1.0 - dx;
-          double dy_inv = 1.0 - dy;
+          double w4 = dx * dy;
+          double w3 = (1.0 - dx) * dy;
+          double w2 = dx * (1.0 - dy);
+          double w1 = (1.0 - dx) * (1.0 - dy);
+
+          warped_image_(y, x) += w1;
+          warped_image_(y, x + 1) += w2;
+          warped_image_(y + 1, x) += w3;
+          warped_image_(y + 1, x + 1) += w4;
           // 计算梯度
           warp_gradient(parameters, point_, dt, grad_warp, hess_warp);
-          // 注意：如果 grad_warp 是 RowMajor，data布局不同。
-          // 假设 grad_warp 是默认的 Matrix<double, 2, 3> (ColMajor):
-          // data: [r0c0, r1c0, r0c1, r1c1, r0c2, r1c2]
-          // 手动获取值比用 Eigen 接口更快
-          double g00 = grad_warp(0, 0), g01 = grad_warp(0, 1), g02 = grad_warp(0, 2);
-          double g10 = grad_warp(1, 0), g11 = grad_warp(1, 1), g12 = grad_warp(1, 2);
-
-          // 获取 Hessian 数据指针
-          const double *h_ptr = hess_warp.data(); // 9个数据
-                                                  // Lambda: 更新单个像素的 13 个通道
-          auto update_pixel = [&](int offset, double w, double c1, double c2, double h_sign)
-          {
-            // 直接获取该像素在 Eigen 矩阵中的行指针
-            // iwe_data_ 是 RowMajor，所以 row(offset) 的数据是连续的
-            double *ptr = iwe_data_.row(offset).data();
-
-            // [0]: Image
-            ptr[0] += w;
-            // [1-3]: Gradient
-            ptr[1] += c1 * g00 + c2 * g10;
-            ptr[2] += c1 * g01 + c2 * g11;
-            ptr[3] += c1 * g02 + c2 * g12;
-            // [4-12]: Hessian
-            if (h_sign > 0)
-            {
-              for (int k = 0; k < 9; ++k)
-                ptr[4 + k] += h_ptr[k];
-            }
-            else
-            {
-              for (int k = 0; k < 9; ++k)
-                ptr[4 + k] -= h_ptr[k];
-            }
-          };
-          int pixel_idx = y * pad_width + x;
-          update_pixel(pixel_idx, dx_inv * dy_inv, (dy - 1.0), (dx - 1.0), 1.0);   // TL
-          update_pixel(pixel_idx + 1, dx * dy_inv, (dy_inv), (-dx), -1.0);         // TR
-          update_pixel(pixel_idx + pad_width, dx_inv * dy, (-dy), (dx_inv), -1.0); // BL
-          update_pixel(pixel_idx + pad_width + 1, dx * dy, (dy), (dx), 1.0);       // BR
+          assign_vec((dy - 1) * grad_warp.row(0) + (dx - 1) * grad_warp.row(1), iwe_grad_, x, y);
+          assign_vec((1 - dy) * grad_warp.row(0) + (-dx) * grad_warp.row(1), iwe_grad_, x + 1, y);
+          assign_vec((-dy) * grad_warp.row(0) + (1 - dx) * grad_warp.row(1), iwe_grad_, x, y + 1);
+          assign_vec(dy * grad_warp.row(0) + dx * grad_warp.row(1), iwe_grad_, x + 1, y + 1);
+          // 计算海森矩阵
+          assign_mat(hess_warp, iwe_hess_, x, y);
+          assign_mat(-hess_warp, iwe_hess_, x + 1, y);
+          assign_mat(-hess_warp, iwe_hess_, x, y + 1);
+          assign_mat(hess_warp, iwe_hess_, x + 1, y + 1);
         }
       }
-      cv::Mat cv_view(pad_height, pad_width, CV_MAKETYPE(CV_64F, 13), iwe_data_.data());
+      blur_eigen_mat(warped_image_);
 
-      // OpenCV 会并行地对这 13 个通道分别进行高斯模糊
-      cv::GaussianBlur(cv_view, cv_view, cv::Size(5, 5), 1.0);
+// 2. 模糊雅可比图 (最重要的改动!)
+// 这实际上是在计算：参数微扰动会导致"模糊后的图像"发生怎样的变化
+// 没有这一步，梯度就是针对"尖锐"图像的，与 Loss 不匹配
+#pragma omp parallel for
+      for (int k = 0; k < 3; ++k)
+      {
+        blur_eigen_mat(iwe_grad_[k]);
+      }
 
+// 3. 模糊海森图
+#pragma omp parallel for
+      for (int k = 0; k < 9; ++k)
+      {
+        blur_eigen_mat(iwe_hess_[k]);
+      }
       // 计算最终的梯度与海森矩阵
-      iwe_gradient(iwe_data_.col(0), loss, pixel_grad_, pixel_hess_);
-      // 计算总梯度，各个像素梯度的加权和
-      // gradient 等于将 pixel_grad 与 iwe_grad_ 第一个通道按像素位置对应相乘后求和
+      iwe_gradient(warped_image_, loss, pixel_grad_, pixel_hess_);
+// 计算总梯度，各个像素梯度的加权和
+// gradient 等于将 pixel_grad 与 iwe_grad_ 第一个通道按像素位置对应相乘后求和
+#pragma omp parallel for
       for (int i = 0; i < 3; ++i)
       {
-        gradient(i) = (pixel_grad_.array() * iwe_data_.col(1 + i).array()).sum();
+        gradient(i) = (pixel_grad_.array() * iwe_grad_[i].array()).sum();
       }
+#pragma omp parallel for
       for (int i = 0; i < 3; ++i)
       {
         for (int j = 0; j < 3; ++j)
         {
-          hessian(i, j) = (pixel_grad_.array() * iwe_data_.col(4 + i * 3 + j).array() + pixel_hess_.array() * iwe_data_.col(1 + i).array() * iwe_data_.col(1 + j).array()).sum();
+          hessian(i, j) = (pixel_grad_.array() * iwe_hess_[3 * i + j].array()).sum() + (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
         }
       }
     }
-    void MainOptimize()
+    void MainOptimize(const Config &config)
     {
       // 使用牛顿法进行优化
-      const int max_iterations = 40;
-      const double tolerance = 1e-5;
+      const int max_iterations = config.solver.max_iters;
+      const double tolerance = config.solver.epsilon_T;
       Eigen::Matrix3d hessian;
       Vec3 gradient;
-      Eigen::Matrix3d D;
       double best_loss = std::numeric_limits<double>::max();
-      double loss = 0.0, prev_loss = best_loss;
+      double loss = 0.0, lambda = 1, prev_loss = best_loss;
       Vec3 best_params = est_angleAxis_;
       for (int iter = 0; iter < max_iterations; ++iter)
       {
-        // compute_loss(est_angleAxis_, loss);
-        compute_gradient(est_angleAxis_, loss, gradient, hessian, true);
-        // compute_gradient(est_angleAxis_, loss, gradient, hessian, true);
+        compute_gradient(est_angleAxis_, loss, gradient, hessian);
 
         // 添加阻尼项以确保Hessian矩阵是正定的
-        Eigen::Matrix3d damped_hessian = hessian;
+        // hessian.diagonal().array() += (lambda * hessian.diagonal().mean());
 
         // 求解线性系统
-        Eigen::Vector3d step = damped_hessian.ldlt().solve(-gradient);
+        Eigen::Vector3d step = hessian.ldlt().solve(-gradient);
         est_angleAxis_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
@@ -246,92 +268,44 @@ namespace spatiotemporal_vo
     // 初始化估计状态
     est_angleAxis_.setZero();
     last_est_var_.setZero();
-
-    // 从配置中加载参数
-    params_.ts_start = 0.8;
-    params_.ts_end = 0.8;
-    params_.sample_count = 1000;
-    params_.iter_num = 1;
-    params_.ceres_iter_num = 250;
-    params_.ceres_iter_thread = 8;
-    params_.gaussian_size = 5;
-    params_.gaussian_sigma = 1.0f;
-    params_.default_value_factor = 1.0f;
   }
 
-  void PolyEstimator::projectEventsTo3D(const std::vector<Vec2> &xy,
-                                        std::vector<Vec3> &coord_3d,
-                                        const std::vector<double> &depth)
-  {
-    int n = xy.size();
-    coord_3d.resize(n);
-
-    double fx = K_(0, 0), fy = K_(1, 1);
-    double cx = K_(0, 2), cy = K_(1, 2);
-
-    for (int i = 0; i < n; ++i)
-    {
-      double x = (xy[i](0) - cx) / fx;
-      double y = (xy[i](1) - cy) / fy;
-      coord_3d[i] = Vec3(x, y, depth.empty() ? 1.0 : depth[i]);
-      // coord_3d[i].normalize();
-    }
-  }
-
-  RegistrationOutput PolyEstimator::run(const std::vector<Vec2> &xy,
-                                        const std::vector<double> &timestamps,
-                                        const std::vector<int> &polarity,
-                                        const std::vector<double> &depth)
+  RegistrationOutput PolyEstimator::run(const EventPacket &packet, const Config &config)
   {
     RegistrationOutput result;
-    result.timespan = {timestamps.front(), timestamps.back()};
+    result.timespan = {packet.t.front(), packet.t.back()};
 
-    if (xy.empty())
+    if (packet.empty())
     {
       result.twist.setZero();
       result.stats.loss = 0;
+      result.stats.time_taken = 0.0;
       result.stats.num_iterations = 0;
       return result;
     }
 
-    // 初始化事件数据
-    eventBundle_.size = xy.size();
-    eventBundle_.coord = xy;
-    eventBundle_.polarity = polarity;
-    eventBundle_.first_tstamp = timestamps.front();
-    eventBundle_.last_tstamp = timestamps.back();
-
-    // 计算相对时间
-    eventBundle_.time_delta.resize(eventBundle_.size);
-    for (int i = 0; i < eventBundle_.size; ++i)
-    {
-      eventBundle_.time_delta[i] = timestamps[i] - timestamps.front();
-    }
-
-    // 投影到 3D
-    event_undis_Bundle_.size = eventBundle_.size;
-    projectEventsTo3D(xy, event_undis_Bundle_.coord_3d, depth);
-
     std::cout << '[' << count_ << "] " << "Poly: Processing "
-              << eventBundle_.size << " events, duration: "
-              << (eventBundle_.last_tstamp - eventBundle_.first_tstamp) << "s" << std::endl;
+              << packet.size() << " events, duration: "
+              << packet.timespan() << "s" << std::endl;
+    result.stats.time_taken = omp_get_wtime();
+    // 构造优化器
     PolyOptimizer optimizer(
-        event_undis_Bundle_.coord_3d,
-        eventBundle_.time_delta,
-        eventBundle_.polarity,
+        packet,
         width_, height_,
         K_, est_angleAxis_);
 
     // 运行优化
-    optimizer.MainOptimize();
+    optimizer.MainOptimize(config);
 
     // 更新结果
     optimizer.getEstimatedParams(est_angleAxis_);
 #ifdef DEBUG
-    std::cout << "Final estimated angular velocity: " << est_angleAxis_.transpose() << std::endl;
+    std::cout << "[DEBUG] Final estimated angular velocity: " << est_angleAxis_.transpose() << std::endl;
 #endif
     // 运行优化
     result.stats.loss = optimizer.getFinalLoss();
+    result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
+    std::cout << "Poly: Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
     // 填充结果
     result.twist = est_angleAxis_;

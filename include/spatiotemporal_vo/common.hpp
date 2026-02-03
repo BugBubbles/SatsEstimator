@@ -44,4 +44,43 @@ namespace spatiotemporal_vo
     RegistrationStats stats;
     std::pair<double, double> timespan = {0.0, 0.0};
   };
+  
+    /**
+   * @brief 事件数据结构
+   */
+  struct EventPacket
+  {
+    std::vector<Vec2> xy; // 事件坐标
+    std::vector<double> t;           // 时间戳
+    std::vector<int> polarity;       // 极性 (1 或 -1)
+    std::vector<Vec3> coord_3d;     // 3D坐标
+
+    size_t size() const { return xy.size(); }
+    bool empty() const { return xy.empty(); }
+    double timespan() const { return t.back() - t.front(); };
+    void clear()
+    {
+      xy.clear();
+      t.clear();
+      polarity.clear();
+      coord_3d.clear();
+    }
+    EventPacket copy() const
+    {
+      EventPacket packet;
+      packet.xy = xy;
+      packet.t = t;
+      packet.polarity = polarity;
+      packet.coord_3d = coord_3d;
+      return packet;
+    }
+    EventPacket operator+=(const EventPacket &other)
+    {
+      xy.insert(xy.end(), other.xy.begin(), other.xy.end());
+      t.insert(t.end(), other.t.begin(), other.t.end());
+      polarity.insert(polarity.end(), other.polarity.begin(), other.polarity.end());
+      coord_3d.insert(coord_3d.end(), other.coord_3d.begin(), other.coord_3d.end());
+      return *this;
+    }
+  };
 } // namespace spatiotemporal_vo

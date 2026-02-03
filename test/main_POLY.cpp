@@ -45,11 +45,17 @@ int main(int argc, char **argv)
   while (data_loader.hasNext())
   {
     EventPacket events = data_loader.getEventsInWindow(
-        t_start,
-        t_start + config.data.time_window,
-        config.data.event_count);
+        config.data.time_window,
+        config.data.max_count, 
+        config.data.unit_count,
+        config.data.adaptive_split);
 
     data_loader.undistortEvents(events, config.camera);
+
+    std::vector<double> depth;
+    data_loader.projectEventsTo3D(events, config.camera, depth);
+
+    data_loader.computeReferenceTime(events, "front");
 
     if (events.empty())
       continue;
@@ -57,8 +63,7 @@ int main(int argc, char **argv)
     std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
 
     // 运行 PEME 估计
-    std::vector<double> dummy_depth; // 空深度，使用默认值 1.0
-    RegistrationOutput result = estimator.run(events.xy, events.t, events.polarity, dummy_depth);
+    RegistrationOutput result = estimator.run(events, config);
     if (logger.is_initialized())
     {
       logger.log(result);

@@ -182,41 +182,19 @@ namespace spatiotemporal_vo
         else if (current_section == "data")
         {
           if (key == "time_window")
-          {
-            try
-            {
-              data.time_window = std::stod(value);
-            }
-            catch (const std::invalid_argument &e)
-            {
-              std::cerr << "Invalid value for time_window: " << value << ". Setting to -1." << std::endl;
-              data.time_window = -1;
-            }
-          }
+            data.time_window = std::stod(value);
           else if (key == "max_events")
-          {
-            try
-            {
-              data.max_events = std::stoll(value);
-            }
-            catch (const std::invalid_argument &e)
-            {
-              std::cerr << "Invalid value for max_events: " << value << ". Setting to -1." << std::endl;
-              data.max_events = -1;
-            }
-          }
+            data.max_events = std::stoll(value);
           else if (key == "event_count")
-          {
-            try
-            {
-              data.event_count = std::stoi(value);
-            }
-            catch (const std::invalid_argument &e)
-            {
-              std::cerr << "Invalid value for event_count: " << value << ". Setting to -1." << std::endl;
-              data.event_count = -1;
-            }
-          }
+            data.event_count = std::stoi(value);
+          else if (key == "grid_size")
+            data.grid_size = std::stoi(value);
+          else if (key == "max_count")
+            data.max_count = std::stoi(value);
+          else if (key == "unit_count")
+            data.unit_count = std::stoi(value);
+          else if (key == "adaptive_split")
+            data.adaptive_split = (value == "true" || value == "1");
         }
       }
       catch (const std::invalid_argument &e)
@@ -276,6 +254,7 @@ namespace spatiotemporal_vo
     ofs << "  time_window: " << data.time_window << "\n";
     ofs << "  max_events: " << data.max_events << "\n";
     ofs << "  event_count: " << data.event_count << "\n\n";
+    ofs << "  grid_size: " << data.grid_size << "\n";
 
     ofs.close();
     std::cout << "Config saved to: " << config_file << std::endl;
