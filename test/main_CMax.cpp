@@ -49,19 +49,11 @@ int main(int argc, char **argv)
   {
     // 获取一批事件
     EventPacket events = data_loader.getEventsInWindow(t_start, t_start + config.data.time_window,
-                                                       config.data.event_count, 5000);
+                                                       config.data.event_count);
     // 去除畸变
     data_loader.undistortEvents(events, config.camera);
 
 #ifdef DEBUG
-    // std::ofstream undistorted_events_file(config.paths.output_root + "/temp.txt");
-    // // 将去畸变后的事件点写入文件
-    // for (size_t i = 0; i < events.size(); ++i)
-    // {
-    //   undistorted_events_file << events.xy[i].x() << " " << events.xy[i].y() << " "
-    //                           << events.t[i] << " " << events.polarity[i] << "\n";
-    // }
-    // undistorted_events_file.flush();
     std::cout << "[DEBUG] events number is " << events.size() << std::endl;
 #endif
     if (events.empty())

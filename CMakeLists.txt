@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(event_camera_vo_cpp)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mavx")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 add_definitions(-DEIGEN_MAX_ALIGN_BYTES=32)
 if(DEBUG)

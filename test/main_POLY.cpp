@@ -17,14 +17,11 @@ int main(int argc, char **argv)
   config.print();
 
   // 2. 初始化数据加载器
-  DataLoader data_loader;
-  std::string event_file = config.paths.data_root + "/" +
-                           config.paths.sequences + "/" +
-                           config.paths.event_file;
+  DataLoader data_loader(config);
 
-  if (!data_loader.loadEvents(event_file))
+  if (!data_loader.hasNext())
   {
-    std::cerr << "Failed to load events from: " << event_file << std::endl;
+    std::cerr << "Failed to load events." << std::endl;
     return -1;
   }
 
@@ -73,4 +70,4 @@ int main(int argc, char **argv)
 
   std::cout << "\n\nProcessed " << frame_count << " frames." << std::endl;
   return 0;
-}
+}   
