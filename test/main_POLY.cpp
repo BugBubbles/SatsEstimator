@@ -25,15 +25,6 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  // 3. 初始化 PEME 估计器
-  PolyEstimator estimator(
-      config.camera.fx,
-      config.camera.fy,
-      config.camera.cx,
-      config.camera.cy,
-      config.camera.width,
-      config.camera.height,
-      config);
 
   // 4. 初始化日志记录器
   ResultLogger logger(config.paths.output_root, "poly", config.paths.suffix);
@@ -57,19 +48,30 @@ int main(int argc, char **argv)
 
     data_loader.computeReferenceTime(events, "front");
 
+    double time_span = events.t.back() - events.t.front();
     if (events.empty())
       continue;
 
     std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
-
+  //  初始化 PEME 估计器
+  PolyEstimator estimator(
+      config.camera.fx,
+      config.camera.fy,
+      config.camera.cx,
+      config.camera.cy,
+      config.camera.width,
+      config.camera.height,
+      events
+      );
     // 运行 PEME 估计
-    RegistrationOutput result = estimator.run(events, config);
+    RegistrationOutput result = estimator.run(config);
+    result.timespan = {t_start, t_start + time_span};
+
     if (logger.is_initialized())
     {
       logger.log(result);
     }
-
-    t_start += config.data.time_window;
+    t_start += time_span;
     frame_count++;
   }
 

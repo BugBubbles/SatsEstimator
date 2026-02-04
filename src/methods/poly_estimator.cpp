@@ -8,34 +8,15 @@
 
 namespace spatiotemporal_vo
 {
-
-  class PolyOptimizer
+    PolyEstimator::PolyEstimator(double fx, double fy, double cx, double cy,
+                               int width, int height, const EventPacket &packet)
+      : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
   {
-  private:
-    // 你的数据成员（和原CMaxFunction一致）
-    std::vector<Vec3> points_;
-    int width_, height_;
-    Eigen::Matrix3d intrinsic_;
-    std::vector<EigenMat> iwe_grad_;
-    std::vector<EigenMat> iwe_hess_;
-    EigenMat warped_image_, pixel_grad_, pixel_hess_;
-    std::vector<double> delta_time_;
-    std::vector<int> polarity_;
-    int n_points_;
-    int padding_ = 100;
-    double final_loss_ = 0.0;
-    Vec3 est_angleAxis_;
-
-  public:
-    void getEstimatedParams(Vec3 &est_angleAxis) const { est_angleAxis = est_angleAxis_; }
-    double getFinalLoss() const { return final_loss_; }
-    PolyOptimizer(const EventPacket &packet,
-                  int width, int height,
-                  const Eigen::Matrix3d &K,
-                  const Vec3 &initial_angleAxis)
-        : points_(packet.coord_3d), delta_time_(packet.t), polarity_(packet.polarity),
-          width_(width), height_(height), intrinsic_(K), est_angleAxis_(initial_angleAxis)
-    {
+      points_ = packet.coord_3d;
+      delta_time_ = packet.t;
+      polarity_ = packet.polarity;
+      n_points_ = points_.size();
+    // 初始化梯度和海森矩阵图像容器
       n_points_ = points_.size();
       warped_image_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       pixel_grad_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
@@ -50,40 +31,35 @@ namespace spatiotemporal_vo
       {
         iwe_hess_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
       }
-    }
+  }
     /**
      * @brief 计算CMax函数对像素的一阶梯度
      */
-    void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
+   void PolyEstimator::iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
     {
       // Ours
       loss = (0.9416 * iwe.array() + (iwe.array() + 0.1).log()).sum() / iwe.sum();
       grad = 0.9416 + 1 / (iwe.array() + 0.1);
       hess = -1 / (iwe.array() + 0.1).square();
     }
-    /**
-     * @brief 计算运动参数对翘曲事件点的梯度
-     * @param parameters 运动参数（角轴表示法）
-     * @param xs, ys 翘曲后的事件点（2D坐标），注意，这里的坐标是减去u0 v0后的坐标
-     * @param grad_warp 输出的梯度矩阵，大小为2x3
-     */
-    void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Eigen::Matrix3d &hess_warp) const
+
+    void PolyEstimator::warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Eigen::Matrix3d &hess_warp) const
     {
       double X_Z = point(0) / point(2);
       double Y_Z = point(1) / point(2);
-      grad_warp << intrinsic_(0, 0) * X_Z * Y_Z, -intrinsic_(0, 0) * (1 + X_Z * X_Z), intrinsic_(0, 0) * Y_Z,
-          intrinsic_(1, 1) * (1 + Y_Z * Y_Z), -intrinsic_(1, 1) * X_Z * Y_Z, -intrinsic_(1, 1) * X_Z;
+      grad_warp << fx_ * X_Z * Y_Z, -fx_ * (1 + X_Z * X_Z), fx_ * Y_Z,
+          fy_ * (1 + Y_Z * Y_Z), -fy_ * X_Z * Y_Z, -fy_ * X_Z;
       grad_warp *= dt;
       hess_warp = grad_warp.row(0).transpose() * grad_warp.row(1) + grad_warp.row(1).transpose() * grad_warp.row(0);
     }
-    void assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
+    void PolyEstimator::assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
       for (int i = 0; i < 3; ++i)
       {
         mat_vec[i](y, x) += vec(i);
       }
     }
-    void assign_mat(const Eigen::Matrix3d &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
+    void PolyEstimator::assign_mat(const Eigen::Matrix3d &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
       for (int i = 0; i < 3; ++i)
       {
@@ -93,7 +69,7 @@ namespace spatiotemporal_vo
         }
       }
     }
-    void compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Eigen::Matrix3d &hessian)
+    void PolyEstimator::compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Eigen::Matrix3d &hessian)
     {
       auto blur_eigen_mat = [&](EigenMat &mat)
       {
@@ -110,10 +86,12 @@ namespace spatiotemporal_vo
       int pad_height = height_ + 2 * padding_;
       warped_image_.setZero();
       // 初始化梯度和海森矩阵图像
+      #pragma omp parallel for
       for (int i = 0; i < 3; ++i)
       {
         iwe_grad_[i].setZero();
       }
+      #pragma omp parallel for
       for (int i = 0; i < 9; ++i)
       {
         iwe_hess_[i].setZero();
@@ -123,10 +101,6 @@ namespace spatiotemporal_vo
       Eigen::Matrix3d hess_warp;
 
       // 提取内参，避免在循环中重复访问成员变量
-      const double fx = intrinsic_(0, 0);
-      const double cx = intrinsic_(0, 2);
-      const double fy = intrinsic_(1, 1);
-      const double cy = intrinsic_(1, 2);
       for (int i = 0; i < n_points_; ++i)
       {
         auto point_ = points_[i];
@@ -146,8 +120,8 @@ namespace spatiotemporal_vo
         points_T(2) = point_(2) + delta_points_T(2) * dt;
 
         // 投影到 2D
-        warped_x = points_T(0) / points_T(2) * fx + cx + padding_;
-        warped_y = points_T(1) / points_T(2) * fy + cy + padding_;
+        warped_x = points_T(0) / points_T(2) * fx_ + cx_ + padding_;
+        warped_y = points_T(1) / points_T(2) * fy_ + cy_ + padding_;
         // 使用双线性插值将当前事件翘曲至图像
         int x = static_cast<int>(floor(warped_x));
         int y = static_cast<int>(floor(warped_y));
@@ -213,7 +187,7 @@ namespace spatiotemporal_vo
         }
       }
     }
-    void MainOptimize(const Config &config)
+    void PolyEstimator::MainOptimize(const Config &config)
     {
       // 使用牛顿法进行优化
       const int max_iterations = config.solver.max_iters;
@@ -246,36 +220,21 @@ namespace spatiotemporal_vo
         }
         prev_loss = loss;
 #ifdef DEBUG
-        std::cout << "Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
-        std::cout << "Estimated Parameters: " << est_angleAxis_.transpose() << std::endl;
+        std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
+        std::cout << "[DEBUG] Estimated Parameters: " << est_angleAxis_.transpose() << std::endl;
 #endif
       }
       // 计算最终损失
       est_angleAxis_ = best_params;
       final_loss_ = best_loss;
-      // compute_loss(est_angleAxis_, final_loss_);
     }
-  };
-  PolyEstimator::PolyEstimator(double fx, double fy, double cx, double cy,
-                               int width, int height, const Config &config)
-      : width_(width), height_(height), count_(1)
-  {
-    // 初始化相机内参矩阵
-    K_ << fx, 0, cx,
-        0, fy, cy,
-        0, 0, 1;
 
-    // 初始化估计状态
-    est_angleAxis_.setZero();
-    last_est_var_.setZero();
-  }
 
-  RegistrationOutput PolyEstimator::run(const EventPacket &packet, const Config &config)
+  RegistrationOutput PolyEstimator::run(const Config &config)
   {
     RegistrationOutput result;
-    result.timespan = {packet.t.front(), packet.t.back()};
 
-    if (packet.empty())
+    if (n_points_ < 10)
     {
       result.twist.setZero();
       result.stats.loss = 0;
@@ -284,34 +243,28 @@ namespace spatiotemporal_vo
       return result;
     }
 
-    std::cout << '[' << count_ << "] " << "Poly: Processing "
-              << packet.size() << " events, duration: "
-              << packet.timespan() << "s" << std::endl;
+    std::cout << '[' << count_ << "] " <<  "<<" << getMethodName() << ">>" << ": Processing "
+              << n_points_ << " events, duration: "
+              << delta_time_.back()-delta_time_.front()<< "s" << std::endl;
     result.stats.time_taken = omp_get_wtime();
-    // 构造优化器
-    PolyOptimizer optimizer(
-        packet,
-        width_, height_,
-        K_, est_angleAxis_);
 
     // 运行优化
-    optimizer.MainOptimize(config);
+    MainOptimize(config);
 
     // 更新结果
-    optimizer.getEstimatedParams(est_angleAxis_);
 #ifdef DEBUG
     std::cout << "[DEBUG] Final estimated angular velocity: " << est_angleAxis_.transpose() << std::endl;
 #endif
     // 运行优化
-    result.stats.loss = optimizer.getFinalLoss();
+    result.stats.loss = final_loss_;
     result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
-    std::cout << "Poly: Optimization took " << result.stats.time_taken << " seconds." << std::endl;
+    std::cout << "<<" << getMethodName() << ">>" <<": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
     // 填充结果
     result.twist = est_angleAxis_;
     result.stats.num_iterations = count_;
 
-    std::cout << '[' << count_ << "] " << "CMax: Estimated angular velocity: "
+    std::cout << '[' << count_ << "] " <<   "<<" << getMethodName() << ">>" <<": Estimated angular velocity: "
               << est_angleAxis_.transpose()
               << ", best loss: " << result.stats.loss << std::endl;
     count_++;
