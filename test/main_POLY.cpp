@@ -2,7 +2,7 @@
 #include <filesystem>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
-#include "methods/poly_estimator.hpp"
+#include "methods/rotation/poly.hpp"
 #include "spatiotemporal_vo/logger.hpp"
 
 using namespace spatiotemporal_vo;
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 
     std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
   //  初始化 PEME 估计器
-  PolyEstimator estimator(
+  PolyRotation estimator(
       config.camera.fx,
       config.camera.fy,
       config.camera.cx,

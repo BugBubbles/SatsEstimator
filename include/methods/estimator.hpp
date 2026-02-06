@@ -12,7 +12,7 @@ namespace spatiotemporal_vo
   /**
    * @brief
    */
-  class PolyEstimator
+  class MotionEstimator
   {
   public:
 
@@ -22,8 +22,13 @@ namespace spatiotemporal_vo
      * @param width, height 图像尺寸
      * @param packet 事件包
      */
-    PolyEstimator(double fx, double fy, double cx, double cy,
+    MotionEstimator(double fx, double fy, double cx, double cy,
                       int width, int height, const EventPacket &packet);
+
+    /**
+     * @brief 虚析构函数
+     */
+    virtual ~MotionEstimator() = default;
 
     /**
      * @brief 运行 PEME 估计
@@ -37,7 +42,12 @@ namespace spatiotemporal_vo
     /**
      * @brief 获取当前估计的角速度
      */
-    Vec3 getEstimatedAngularVelocity() const { return est_angleAxis_; }
+    Vec3 getEstimatedAngular() const { return est_angleAxis_; }
+
+    /**
+     * @brief 获取当前估计的平移速度
+     */
+    Vec3 getEstimatedTranslation() const { return est_transAxis_; }
 
     /**
      * @brief 获取最终损失值
@@ -45,17 +55,30 @@ namespace spatiotemporal_vo
     double getFinalLoss() const { return final_loss_; }
 
   protected:
-  
+      // 相机内参矩阵
+    double fx_, fy_, cx_, cy_;
     EigenMat warped_image_, pixel_grad_, pixel_hess_;
-    virtual void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const;
-    virtual std::string getMethodName() const { return "PolyEstimator"; }
+    Vec3 est_angleAxis_, est_transAxis_; // 当前估计的角速度
+    virtual std::string getMethodName() const { return "MotionEstimator"; }
+    /**
+     * @brief 计算CMax函数对像素的一阶梯度
+     * @param iwe 输入的翘曲事件图像
+     * @param loss 输出的损失值
+     * @param grad 输出的梯度图像
+     * @param hess 输出的海森图像
+     */
+    virtual void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const = 0;
+    /**
+     * @brief 计算运动参数对翘曲事件点的梯度
+     * @param parameters 运动参数（角轴表示法）
+     * @param xs, ys 翘曲后的事件点（2D坐标），注意，这里的坐标是减去u0 v0后的坐标
+     * @param grad_warp 输出的梯度矩阵，大小为2x3
+     */
+    virtual void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Eigen::Matrix3d &hess_warp) const = 0;
 
   private:
-    // 相机内参矩阵
-    double fx_, fy_, cx_, cy_;
     int width_, height_, padding_ = 100;
     // 估计状态
-    Vec3 est_angleAxis_; // 当前估计的角速度
     int count_;
     std::vector<Vec3> points_;
     std::vector<EigenMat> iwe_grad_;
@@ -88,13 +111,7 @@ namespace spatiotemporal_vo
      * @return 损失函数值
      */
     void MainOptimize(const Config &config);
-    /**
-     * @brief 计算运动参数对翘曲事件点的梯度
-     * @param parameters 运动参数（角轴表示法）
-     * @param xs, ys 翘曲后的事件点（2D坐标），注意，这里的坐标是减去u0 v0后的坐标
-     * @param grad_warp 输出的梯度矩阵，大小为2x3
-     */
-    void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Eigen::Matrix3d &hess_warp) const;
+
 
     /**
      * @brief 将向量值分配到对应的矩阵位置

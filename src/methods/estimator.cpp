@@ -1,5 +1,5 @@
 #include "spatiotemporal_vo/common.hpp"
-#include "methods/poly_estimator.hpp"
+#include "methods/estimator.hpp"
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -8,7 +8,7 @@
 
 namespace spatiotemporal_vo
 {
-    PolyEstimator::PolyEstimator(double fx, double fy, double cx, double cy,
+    MotionEstimator::MotionEstimator(double fx, double fy, double cx, double cy,
                                int width, int height, const EventPacket &packet)
       : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
   {
@@ -35,31 +35,15 @@ namespace spatiotemporal_vo
     /**
      * @brief 计算CMax函数对像素的一阶梯度
      */
-   void PolyEstimator::iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
-    {
-      // Ours
-      loss = (0.9416 * iwe.array() + (iwe.array() + 0.1).log()).sum() / iwe.sum();
-      grad = 0.9416 + 1 / (iwe.array() + 0.1);
-      hess = -1 / (iwe.array() + 0.1).square();
-    }
 
-    void PolyEstimator::warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Eigen::Matrix3d &hess_warp) const
-    {
-      double X_Z = point(0) / point(2);
-      double Y_Z = point(1) / point(2);
-      grad_warp << fx_ * X_Z * Y_Z, -fx_ * (1 + X_Z * X_Z), fx_ * Y_Z,
-          fy_ * (1 + Y_Z * Y_Z), -fy_ * X_Z * Y_Z, -fy_ * X_Z;
-      grad_warp *= dt;
-      hess_warp = grad_warp.row(0).transpose() * grad_warp.row(1) + grad_warp.row(1).transpose() * grad_warp.row(0);
-    }
-    void PolyEstimator::assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
+    void MotionEstimator::assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
       for (int i = 0; i < 3; ++i)
       {
         mat_vec[i](y, x) += vec(i);
       }
     }
-    void PolyEstimator::assign_mat(const Eigen::Matrix3d &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
+    void MotionEstimator::assign_mat(const Eigen::Matrix3d &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
       for (int i = 0; i < 3; ++i)
       {
@@ -69,7 +53,7 @@ namespace spatiotemporal_vo
         }
       }
     }
-    void PolyEstimator::compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Eigen::Matrix3d &hessian)
+    void MotionEstimator::compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Eigen::Matrix3d &hessian)
     {
       auto blur_eigen_mat = [&](EigenMat &mat)
       {
@@ -187,7 +171,7 @@ namespace spatiotemporal_vo
         }
       }
     }
-    void PolyEstimator::MainOptimize(const Config &config)
+    void MotionEstimator::MainOptimize(const Config &config)
     {
       // 使用牛顿法进行优化
       const int max_iterations = config.solver.max_iters;
@@ -230,7 +214,7 @@ namespace spatiotemporal_vo
     }
 
 
-  RegistrationOutput PolyEstimator::run(const Config &config)
+  RegistrationOutput MotionEstimator::run(const Config &config)
   {
     RegistrationOutput result;
 
