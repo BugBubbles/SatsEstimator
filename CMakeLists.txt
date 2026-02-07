@@ -29,6 +29,11 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 
 # 5. OpenMP
 find_package(OpenMP REQUIRED)
+if(BOOST_AVAILABLE)
+    find_package(Boost REQUIRED)
+    include_directories(${Boost_INCLUDE_DIRS})
+    add_definitions(-DBOOST_AVAILABLE)
+endif()
 # --- 包含目录 ---
 include_directories(include)
 

@@ -10,6 +10,9 @@ function(add_test_executable TARGET_NAME SOURCE_FILE)
             Eigen3::Eigen
             ${OpenMP_CXX_LIBRARIES}
     )
+    if(BOOST_AVAILABLE AND TARGET_NAME MATCHES ".*_stppp")
+        target_link_libraries(${TARGET_NAME} PRIVATE ${Boost_LIBRARIES})
+    endif()
     # 可执行文件会自动输出到 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} (build/bin)
 endfunction()
 
