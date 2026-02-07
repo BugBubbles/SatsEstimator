@@ -29,7 +29,7 @@ namespace spatiotemporal_vo
     std::cout << "Logger initialized: " << filepath << std::endl;
   }
 
-  void ResultLogger::log(const RegistrationOutput &output)
+  void ResultLogger::log(const RegistrationOutput &output, LogMode mode)
   {
     if (!is_initialized_ || !log_file_.is_open())
     {
@@ -42,11 +42,35 @@ namespace spatiotemporal_vo
               << std::setprecision(9)
               << output.timespan.first << " "
               << output.timespan.second << " "
-              << output.stats.time_taken << " "
-              << output.twist(0) << " "
+              << output.stats.time_taken << " ";
+    switch (mode)
+    {
+    case LogMode::Rotation :{
+    log_file_ << output.twist(0) << " "
               << output.twist(1) << " "
               << output.twist(2) << std::endl;
-
+              break;
+    }
+    case LogMode::Translation :{
+    log_file_ << output.trans(0) << " "
+              << output.trans(1) << " "
+              << output.trans(2) << std::endl;
+              break;
+    }
+    case LogMode::SixDof :{
+    log_file_ << output.twist(0) << " "
+              << output.twist(1) << " "
+              << output.twist(2) << " "
+              << output.trans(0) << " "
+              << output.trans(1) << " "
+              << output.trans(2) << std::endl;
+              break;
+    }
+    default:
+    {
+      log_file_ << "Invalid LogMode!" << std::endl;
+    }
+  }
     // 刷新一次
     log_file_.flush();
   }

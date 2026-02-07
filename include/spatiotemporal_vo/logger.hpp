@@ -5,6 +5,12 @@
 #include <fstream>
 namespace spatiotemporal_vo
 {
+  enum LogMode
+  {
+    Rotation,
+    SixDof,
+    Translation
+  };
 
   /**
    * @brief 简化的可视化器 (仅使用 OpenCV)
@@ -27,7 +33,7 @@ namespace spatiotemporal_vo
      * @brief 记录日志
      * @param output 优化器输出结果
      */
-    void log(const RegistrationOutput &output);
+    void log(const RegistrationOutput &output, LogMode mode);
     /**
      * @brief 关闭日志文件
      */

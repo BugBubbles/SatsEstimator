@@ -40,8 +40,9 @@ namespace spatiotemporal_vo
      * @param max_count 最大事件数
      * @param unit_count 基础事件数单位
      * @param adaptive_split 是否自适应分割
+     * @param use_depth 是否使用深度信息（假设事件文件中包含深度数据）
      */
-    EventPacket getEventsInWindow(double min_delta_time, int max_count, int unit_count, bool adaptive_split);
+    EventPacket getEventsInWindow(double min_delta_time, int max_count, int unit_count, bool adaptive_split, bool use_depth = false);
 
     /**
      * @brief 检查是否还有数据
@@ -58,9 +59,8 @@ namespace spatiotemporal_vo
      * @brief 将事件点投影到3D空间
      * @param packet 事件包
      * @param cam_cfg 相机配置
-     * @param depth_map 深度图（与图像尺寸相同的深度值数组，按行优先存储）
      */
-    void projectEventsTo3D(EventPacket &packet, const CameraConfig &cam_cfg, std::vector<double> &depth);
+    void projectEventsTo3D(EventPacket &packet, const CameraConfig &cam_cfg);
 
     /**
      * @brief 计算参考时间并更新全部事件的时间戳

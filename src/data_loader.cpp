@@ -103,7 +103,7 @@ namespace spatiotemporal_vo
     return events_buffer_.copy();
   }
 
-  EventPacket DataLoader::getEventsInWindow(double min_timespan, int max_count, int unit_count, bool adaptive_split)
+  EventPacket DataLoader::getEventsInWindow(double min_timespan, int max_count, int unit_count, bool adaptive_split, bool use_depth)
   {
     std::string line;
 
@@ -115,15 +115,28 @@ namespace spatiotemporal_vo
         if (line.empty() || line[0] == '#' || line[0] == '%')
           continue;
         std::istringstream iss(line);
-        double t, x, y;
+        double t, x, y, d;
         int p;
         // 假设格式为: t x y p
+        if (use_depth)
+        {
+          if (iss >> t >> x >> y >> p >> d)
+          {
+            events_buffer_.t.push_back(t);
+            events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
+            events_buffer_.depth.push_back(d);
+            events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
+          }
+        }
+        else
+        {
         if (iss >> t >> x >> y >> p)
         {
           events_buffer_.t.push_back(t);
           events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
           events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
         }
+      }
       }
       return events_buffer_.copy();
     }
@@ -142,15 +155,27 @@ namespace spatiotemporal_vo
           if (line.empty() || line[0] == '#' || line[0] == '%')
             continue;
           std::istringstream iss(line);
-          double t, x, y;
+          double t, x, y, d;
           int p;
           // 假设格式为: t x y p
+          if (use_depth)
+          {
+            if (iss >> t >> x >> y >> p >> d)
+            {
+              packet.t.push_back(t);
+              packet.xy.push_back(Eigen::Vector2d(x, y));
+              packet.depth.push_back(d);
+              packet.polarity.push_back(p > 0 ? 1 : -1);
+            }
+          }
+          else
+          {
           if (iss >> t >> x >> y >> p)
           {
             packet.t.push_back(t);
             packet.xy.push_back(Eigen::Vector2d(x, y));
             packet.polarity.push_back(p > 0 ? 1 : -1);
-          }
+          }}
         }
         // 计算初始包的状态量
         double metric = compute_grid_metric(packet);
@@ -186,6 +211,7 @@ namespace spatiotemporal_vo
       return packet;
     }
   }
+
   double DataLoader::compute_grid_metric(const EventPacket &packet)
   {
     // 计算空间归一化速率
@@ -236,10 +262,11 @@ namespace spatiotemporal_vo
       packet.xy[i] = Vec2(undistorted_pts[i].x, undistorted_pts[i].y);
   }
 
-  void DataLoader::projectEventsTo3D(EventPacket &packet, const CameraConfig &cam_cfg, std::vector<double> &depth)
+  void DataLoader::projectEventsTo3D(EventPacket &packet, const CameraConfig &cam_cfg)
   {
     int n = packet.size();
     packet.coord_3d.resize(n);
+    bool depth_provided = !packet.depth.empty();
 
     double fx = cam_cfg.fx;
     double fy = cam_cfg.fy;
@@ -248,9 +275,9 @@ namespace spatiotemporal_vo
 
     for (int i = 0; i < n; ++i)
     {
-      double x = (packet.xy[i](0) - cx) / fx;
-      double y = (packet.xy[i](1) - cy) / fy;
-      packet.coord_3d[i] = Vec3(x, y, depth.empty() ? 1.0 : depth[i]);
+      double x = (packet.xy[i](0) - cx) / fx * (depth_provided ? packet.depth[i] : 1.0);
+      double y = (packet.xy[i](1) - cy) / fy * (depth_provided ? packet.depth[i] : 1.0);
+      packet.coord_3d[i] = Vec3(x, y, depth_provided ? packet.depth[i] : 1.0);
     }
   }
 

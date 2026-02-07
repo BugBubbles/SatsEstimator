@@ -154,6 +154,8 @@ namespace spatiotemporal_vo
             solver.trim_ratio = std::stod(value);
           else if (key == "convergence_thresh")
             solver.convergence_thresh = std::stod(value);
+          else if (key == "regularization")
+            solver.regularization = std::stod(value);
         }
         else if (current_section == "camera")
         {
@@ -255,6 +257,9 @@ namespace spatiotemporal_vo
     ofs << "  max_events: " << data.max_events << "\n";
     ofs << "  event_count: " << data.event_count << "\n\n";
     ofs << "  grid_size: " << data.grid_size << "\n";
+    ofs << "  max_count: " << data.max_count << "\n";
+    ofs << "  unit_count: " << data.unit_count << "\n";
+    ofs << "  adaptive_split: " << (data.adaptive_split ? "true" : "false") << "\n";
 
     ofs.close();
     std::cout << "Config saved to: " << config_file << std::endl;
@@ -271,6 +276,7 @@ namespace spatiotemporal_vo
     std::cout << "  epsilon_T: " << solver.epsilon_T << std::endl;
     std::cout << "  trim_ratio: " << solver.trim_ratio << std::endl;
     std::cout << "  convergence_thresh: " << solver.convergence_thresh << std::endl;
+    std::cout << "  regularization: " << solver.regularization << std::endl;
 
     std::cout << "\n[Camera]" << std::endl;
     std::cout << "  fx: " << camera.fx << std::endl;
@@ -293,6 +299,10 @@ namespace spatiotemporal_vo
     std::cout << "  time_window: " << data.time_window << std::endl;
     std::cout << "  max_events: " << data.max_events << std::endl;
     std::cout << "  event_count: " << data.event_count << std::endl;
+    std::cout << "  grid_size: " << data.grid_size << std::endl;
+    std::cout << "  max_count: " << data.max_count << std::endl;
+    std::cout << "  unit_count: " << data.unit_count << std::endl;
+    std::cout << "  adaptive_split: " << (data.adaptive_split ? "true" : "false") << std::endl;
 
     std::cout << "===================================" << std::endl;
   }

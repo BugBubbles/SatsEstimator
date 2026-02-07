@@ -19,10 +19,10 @@ file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main_*.cpp")
 foreach(TEST_SOURCE ${TEST_SOURCES})
     # 获取文件名（不含路径和扩展名）
     get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
-    
+    string(REPLACE "main_" "" EXEC_NAME ${TEST_NAME})
     # 避免重复添加已经手动添加的目标
-    if(NOT TARGET ${TEST_NAME})
-        add_test_executable(${TEST_NAME} ${TEST_SOURCE})
-        message(STATUS "Added test executable: ${TEST_NAME}")
+    if(NOT TARGET ${EXEC_NAME})
+        add_test_executable(${EXEC_NAME} ${TEST_SOURCE})
+        message(STATUS "Added test executable: ${EXEC_NAME}")
     endif()
 endforeach()

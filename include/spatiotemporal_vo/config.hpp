@@ -16,6 +16,7 @@ struct SolverConfig {
     bool trimming = false;      // 是否使用 trimming
     double trim_ratio = 0.9;    // trimming 比例
     double convergence_thresh = 1e-6;  // 收敛阈值
+    double regularization = 0.0;     // 正则化项权重
 };
 
 /**

@@ -40,7 +40,8 @@ namespace spatiotemporal_vo
 
   struct RegistrationOutput
   {
-    Eigen::Vector3d twist = Eigen::Vector3d::Zero();
+    Vec3 trans = Vec3::Zero();
+    Vec3 twist = Vec3::Zero();
     RegistrationStats stats;
     std::pair<double, double> timespan = {0.0, 0.0};
   };
@@ -53,6 +54,7 @@ namespace spatiotemporal_vo
     std::vector<Vec2> xy; // 事件坐标
     std::vector<double> t;           // 时间戳
     std::vector<int> polarity;       // 极性 (1 或 -1)
+    std::vector<double> depth;       // 深度值 (可选)
     std::vector<Vec3> coord_3d;     // 3D坐标
 
     size_t size() const { return xy.size(); }
@@ -64,6 +66,7 @@ namespace spatiotemporal_vo
       t.clear();
       polarity.clear();
       coord_3d.clear();
+      depth.clear();
     }
     EventPacket copy() const
     {
@@ -72,6 +75,7 @@ namespace spatiotemporal_vo
       packet.t = t;
       packet.polarity = polarity;
       packet.coord_3d = coord_3d;
+      packet.depth = depth;
       return packet;
     }
     EventPacket operator+=(const EventPacket &other)
@@ -80,6 +84,7 @@ namespace spatiotemporal_vo
       t.insert(t.end(), other.t.begin(), other.t.end());
       polarity.insert(polarity.end(), other.polarity.begin(), other.polarity.end());
       coord_3d.insert(coord_3d.end(), other.coord_3d.begin(), other.coord_3d.end());
+      depth.insert(depth.end(), other.depth.begin(), other.depth.end());
       return *this;
     }
   };

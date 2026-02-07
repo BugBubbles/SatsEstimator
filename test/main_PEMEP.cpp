@@ -64,7 +64,7 @@ int main(int argc, char **argv)
     RegistrationOutput result = estimator.run(events.xy, events.t, events.polarity, dummy_depth);
     if (logger.is_initialized())
     {
-      logger.log(result);
+      logger.log(result, LogMode::Rotation);
     }
 
     t_start += config.data.time_window;

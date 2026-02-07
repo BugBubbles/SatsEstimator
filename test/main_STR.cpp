@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 
     if (logger.is_initialized())
     {
-      logger.log(result);
+      logger.log(result, LogMode::Rotation);
     }
   }
 
