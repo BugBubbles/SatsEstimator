@@ -100,6 +100,7 @@ namespace spatiotemporal_vo
         }
       }
     }
+    events_buffer_.set_timespan();
     return events_buffer_.copy();
   }
 
@@ -138,6 +139,7 @@ namespace spatiotemporal_vo
         }
       }
       }
+      events_buffer_.set_timespan();
       return events_buffer_.copy();
     }
     else
@@ -177,6 +179,7 @@ namespace spatiotemporal_vo
             packet.polarity.push_back(p > 0 ? 1 : -1);
           }}
         }
+        packet.set_timespan();
         // 计算初始包的状态量
         double metric = compute_grid_metric(packet);
         if (score_.size() <= 2)
@@ -193,7 +196,7 @@ namespace spatiotemporal_vo
           double std = std::sqrt(std::accumulate(score_var_.begin(), score_var_.end(), 0.0) / num_scores - mean * mean);
           // 计算当前自由度下的t分布置信区间
           double t_threshold = t_ppf_[std::min(score_.size() - 2, t_ppf_.size() - 1)];
-          if ((std::abs(metric - mean) < t_threshold * std * min_timespan / packet.timespan() && score_.size() < max_count) || (events_buffer_.timespan() < min_timespan))
+          if ((std::abs(metric - mean) < t_threshold * std * min_timespan / (packet.t_end - packet.t_start) && score_.size() < max_count) || (events_buffer_.t_end - events_buffer_.t_start < min_timespan))
           {
             events_buffer_ += packet;
             score_.push_back(metric);
@@ -208,6 +211,7 @@ namespace spatiotemporal_vo
           }
         }
       }
+      events_buffer_.set_timespan();
       return packet;
     }
   }
@@ -215,7 +219,7 @@ namespace spatiotemporal_vo
   double DataLoader::compute_grid_metric(const EventPacket &packet)
   {
     // 计算空间归一化速率
-    if (packet.empty() || packet.timespan() <= 1e-7)
+    if (packet.empty() || packet.t_end - packet.t_start <= 1e-7)
       return 0.0;
 
     std::unordered_set<int> unique_indices;
@@ -229,7 +233,7 @@ namespace spatiotemporal_vo
       unique_indices.insert(flat_index);
     }
 
-    double dt = packet.timespan();
+    double dt = packet.t_end - packet.t_start;
     return static_cast<double>(unique_indices.size()) * grid_size_ * grid_size_ / dt;
   }
   void DataLoader::undistortEvents(EventPacket &packet, const CameraConfig &cam_cfg)

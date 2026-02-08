@@ -76,7 +76,7 @@ int main(int argc, char **argv)
         dummy_depth);
 
     frame_count++;
-    t_start += events.timespan();
+    t_start += (events.t_end - events.t_start);
     // 6. 保存结果
 
     if (logger.is_initialized())

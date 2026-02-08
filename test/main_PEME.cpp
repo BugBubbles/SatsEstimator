@@ -67,7 +67,7 @@ int main(int argc, char **argv)
       logger.log(result, LogMode::Rotation);
     }
 
-    t_start += config.data.time_window;
+    t_start += (events.t_end - events.t_start);
     frame_count++;
   }
 

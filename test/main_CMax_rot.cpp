@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 
     // 运行 PEME 估计
     RegistrationOutput result = estimator.run(config, events);
-    result.timespan = {t_start, t_start + time_span};
+    result.timespan = {events.t_start, events.t_end};
 
     if (logger.is_initialized())
     {

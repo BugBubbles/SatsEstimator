@@ -105,14 +105,27 @@ namespace spatiotemporal_vo
      * @param vec 输入向量
      * @param mat_vec 矩阵向量
      */
-    void assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const;
-
+    inline void assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
+    {
+      for (int i = 0; i < 3; ++i)
+      {
+        mat_vec[i](y, x) += vec(i);
+      }
+    }
     /**
      * @brief 将矩阵值分配到对应的矩阵位置
      * @param mat 输入矩阵
      * @param mat_vec 矩阵向量
      */
-    void assign_mat(const Mat3 &mat, std::vector<EigenMat> &mat_vec, int x, int y) const;
-
+    inline void assign_mat(const Mat3 &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
+    {
+      for (int i = 0; i < 3; ++i)
+      {
+        for (int j = 0; j < 3; ++j)
+        {
+          mat_vec[i * 3 + j](y, x) += mat(i, j);
+        }
+      }
+    };
   };
 } // namespace spatiotemporal_vo

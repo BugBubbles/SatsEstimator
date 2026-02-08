@@ -31,23 +31,23 @@ namespace spatiotemporal_vo
      * @brief 计算CMax函数对像素的一阶梯度
      */
 
-    void MotionEstimator::assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
-    {
-      for (int i = 0; i < 3; ++i)
-      {
-        mat_vec[i](y, x) += vec(i);
-      }
-    }
-    void MotionEstimator::assign_mat(const Mat3 &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
-    {
-      for (int i = 0; i < 3; ++i)
-      {
-        for (int j = 0; j < 3; ++j)
-        {
-          mat_vec[i * 3 + j](y, x) += mat(i, j);
-        }
-      }
-    }
+    // void MotionEstimator::assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
+    // {
+    //   for (int i = 0; i < 3; ++i)
+    //   {
+    //     mat_vec[i](y, x) += vec(i);
+    //   }
+    // }
+    // void MotionEstimator::assign_mat(const Mat3 &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
+    // {
+    //   for (int i = 0; i < 3; ++i)
+    //   {
+    //     for (int j = 0; j < 3; ++j)
+    //     {
+    //       mat_vec[i * 3 + j](y, x) += mat(i, j);
+    //     }
+    //   }
+    // }
 
     void MotionEstimator::MainOptimize(const Config &config)
     {
@@ -125,7 +125,7 @@ namespace spatiotemporal_vo
     // 运行优化
     result.stats.loss = final_loss_;
     result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
-    std::cout << "<<" << getMethodName() << ">>" <<": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
+    std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" <<": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
     // 填充结果
     result.twist = est_angleAxis_;

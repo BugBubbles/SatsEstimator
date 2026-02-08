@@ -12,7 +12,7 @@ data:
   event_count: 30000
   unit_count: 2000
   max_count: 15
-  is_adaptive: true
+  adaptive_split: true
   max_events: 200000000000
   grid_size: 20
 

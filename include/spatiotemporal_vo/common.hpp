@@ -56,10 +56,11 @@ namespace spatiotemporal_vo
     std::vector<int> polarity;       // 极性 (1 或 -1)
     std::vector<double> depth;       // 深度值 (可选)
     std::vector<Vec3> coord_3d;     // 3D坐标
+    double t_start, t_end;        // 时间范围
 
     size_t size() const { return xy.size(); }
     bool empty() const { return xy.empty(); }
-    double timespan() const { return t.back() - t.front(); };
+    void set_timespan() {t_start = t.front(); t_end = t.back();}
     void clear()
     {
       xy.clear();
@@ -67,6 +68,7 @@ namespace spatiotemporal_vo
       polarity.clear();
       coord_3d.clear();
       depth.clear();
+      t_start = t_end = 0.0;
     }
     EventPacket copy() const
     {
@@ -76,6 +78,8 @@ namespace spatiotemporal_vo
       packet.polarity = polarity;
       packet.coord_3d = coord_3d;
       packet.depth = depth;
+      packet.t_start = t_start;
+      packet.t_end = t_end;
       return packet;
     }
     EventPacket operator+=(const EventPacket &other)
@@ -85,6 +89,8 @@ namespace spatiotemporal_vo
       polarity.insert(polarity.end(), other.polarity.begin(), other.polarity.end());
       coord_3d.insert(coord_3d.end(), other.coord_3d.begin(), other.coord_3d.end());
       depth.insert(depth.end(), other.depth.begin(), other.depth.end());
+      t_start = t_start;
+      t_end = other.t_end;
       return *this;
     }
   };
