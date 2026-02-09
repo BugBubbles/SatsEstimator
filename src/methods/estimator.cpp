@@ -17,15 +17,19 @@ namespace spatiotemporal_vo
       pixel_grad_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       pixel_hess_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       iwe_grad_.resize(3);
+#ifdef ANALYTIC_HESSIAN
       iwe_hess_.resize(9);
+#endif
       for (int i = 0; i < 3; ++i)
       {
         iwe_grad_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
       }
+#ifdef ANALYTIC_HESSIAN
       for (int i = 0; i < 9; ++i)
       {
         iwe_hess_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
       }
+#endif
   }
     /**
      * @brief 计算CMax函数对像素的一阶梯度
@@ -88,7 +92,7 @@ namespace spatiotemporal_vo
           best_loss = loss;
           best_params = est_angleAxis_;
         }
-        lr *= 0.98; // 减小学习率
+        lr *= decay; // 减小学习率
         prev_loss = loss;
 #ifdef DEBUG
         std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;

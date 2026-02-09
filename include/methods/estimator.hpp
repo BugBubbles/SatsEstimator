@@ -58,7 +58,11 @@ namespace spatiotemporal_vo
     int width_, height_, padding_ = 100;
     const std::vector<double>* delta_time_;
     const std::vector<int>* polarity_;
+#ifdef ANALYTIC_HESSIAN
     std::vector<EigenMat> iwe_hess_, iwe_grad_;
+#else
+    std::vector<EigenMat> iwe_grad_;
+#endif
     int n_points_;
     double final_loss_ = 0.0;
     EigenMat warped_image_, pixel_grad_, pixel_hess_;

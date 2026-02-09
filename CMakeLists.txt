@@ -4,9 +4,26 @@ project(event_camera_vo_cpp)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mavx")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 add_definitions(-DEIGEN_MAX_ALIGN_BYTES=32)
+
+# --- DEBUG模式 ---
+option(DEBUG "Enable debug mode" OFF)
 if(DEBUG)
     add_definitions(-DDEBUG)
 endif()
+# --- 是否构建测试 ---
+option(BUILD_TESTS "Build [cmax,stppp,poly] test cases" ON)
+
+# --- 是否采用解析海森矩阵 ---
+option(ANALYTIC_HESSIAN "Use analytic Hessian in ego-motion estimation" OFF)
+if(ANALYTIC_HESSIAN)
+# 添加警告，说明使用解析Hessian矩阵计算量较高，且收敛性会变差，已经是被deprecated的选项了
+message(WARNING "Using analytic Hessian will significantly increase computational cost and may lead to worse convergence. This option is DEPRECATED and NOT recommended for use.")
+    add_definitions(-DANALYTIC_HESSIAN)
+endif()
+
+# --- 是否使用Boost库 ---
+option(BOOST_AVAILABLE "Boost library available for use. Optional for STPPP calculation." OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

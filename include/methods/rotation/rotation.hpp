@@ -44,11 +44,13 @@ namespace spatiotemporal_vo
       {
         iwe_grad_[i].setZero();
       }
+#ifdef ANALYTIC_HESSIAN
       #pragma omp parallel for
       for (int i = 0; i < 9; ++i)
       {
         iwe_hess_[i].setZero();
       }
+#endif
       double warped_x, warped_y, event_x, event_y;
       Eigen::Matrix<double, 2, 3> grad_warp;
       Mat3 hess_warp;
@@ -99,10 +101,12 @@ namespace spatiotemporal_vo
           assign_vec((-dy) * grad_warp.row(0) + (1 - dx) * grad_warp.row(1), iwe_grad_, x, y + 1);
           assign_vec(dy * grad_warp.row(0) + dx * grad_warp.row(1), iwe_grad_, x + 1, y + 1);
           // 计算海森矩阵
+#ifdef ANALYTIC_HESSIAN
           assign_mat(hess_warp, iwe_hess_, x, y);
           assign_mat(-hess_warp, iwe_hess_, x + 1, y);
           assign_mat(-hess_warp, iwe_hess_, x, y + 1);
           assign_mat(hess_warp, iwe_hess_, x + 1, y + 1);
+#endif
         }
       }
       blur_eigen_mat(warped_image_);
@@ -117,11 +121,13 @@ namespace spatiotemporal_vo
       }
 
 // 3. 模糊海森图
+#ifdef ANALYTIC_HESSIAN
 #pragma omp parallel for
       for (int k = 0; k < 9; ++k)
       {
         blur_eigen_mat(iwe_hess_[k]);
       }
+#endif
       // 计算最终的梯度与海森矩阵
       iwe_gradient(warped_image_, loss, pixel_grad_, pixel_hess_);
 // 计算总梯度，各个像素梯度的加权和
@@ -136,8 +142,11 @@ namespace spatiotemporal_vo
       {
         for (int j = 0; j < 3; ++j)
         {
-          // hessian(i, j) = (pixel_grad_.array() * iwe_hess_[3 * i + j].array()).sum() + (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
-        hessian(i, j) = (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();  
+#ifdef ANALYTIC_HESSIAN
+          hessian(i, j) = (pixel_grad_.array() * iwe_hess_[3 * i + j].array()).sum() + (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
+#else
+        hessian(i, j) = (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
+#endif
         }
       }
     }
