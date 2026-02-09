@@ -54,20 +54,28 @@ namespace spatiotemporal_vo
       // 使用牛顿法进行优化
       const int max_iterations = config.solver.max_iters;
       const double tolerance = config.solver.convergence_thresh;
+      const double decay = config.solver.decay;
+      double lr = config.solver.lr;
       Mat3 hessian;
       Vec3 gradient;
       double best_loss = std::numeric_limits<double>::max();
-      double loss = 0.0, lambda = 1, prev_loss = best_loss;
-      Vec3 best_params = est_angleAxis_;
+      double loss, lambda = 1.0, prev_loss = best_loss;
+      Vec3 best_params = est_angleAxis_, step;
       for (int iter = 0; iter < max_iterations; ++iter)
       {
         compute_gradient(est_angleAxis_, loss, gradient, hessian);
-
+#ifdef DEBUG
+        std::cout << "[DEBUG] loss = " << loss << std::endl;
+        std::cout << "[DEBUG] gradient = " << gradient.transpose() << std::endl;
+        std::cout << "[DEBUG] hessian :" << hessian << std::endl;
+        Eigen::SelfAdjointEigenSolver<Mat3> eigensolver(hessian);
+        std::cout << "[DEBUG] Hessian eigenvalues: " << eigensolver.eigenvalues().transpose() << std::endl;
+#endif
         // 添加阻尼项以确保Hessian矩阵是正定的
         // hessian.diagonal().array() += (lambda * hessian.diagonal().mean());
 
         // 求解线性系统
-        Eigen::Vector3d step = hessian.ldlt().solve(-gradient);
+        step = hessian.ldlt().solve(-gradient) * lr;
         est_angleAxis_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
@@ -80,6 +88,7 @@ namespace spatiotemporal_vo
           best_loss = loss;
           best_params = est_angleAxis_;
         }
+        lr *= 0.98; // 减小学习率
         prev_loss = loss;
 #ifdef DEBUG
         std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;

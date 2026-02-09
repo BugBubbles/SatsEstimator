@@ -12,6 +12,7 @@ namespace spatiotemporal_vo {
 struct SolverConfig {
     int max_iters = 10;         // 最大迭代次数
     double lr = 1.0;            // 学习率
+    double decay = 0.98;        // 学习率衰减
     double epsilon_T = 0.05;    // 时间邻域阈值
     bool trimming = false;      // 是否使用 trimming
     double trim_ratio = 0.9;    // trimming 比例

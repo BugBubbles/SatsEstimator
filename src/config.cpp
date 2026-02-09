@@ -26,9 +26,11 @@ namespace spatiotemporal_vo
     // Solver 默认配置
     solver.max_iters = 10;
     solver.lr = 1.0;
+    solver.decay = 0.98;
     solver.epsilon_T = 0.05;
     solver.trim_ratio = 0.9;
     solver.convergence_thresh = 1e-6;
+    solver.regularization = 0.0;
 
     // Camera 默认配置
     camera.fx = 500.0;
@@ -148,6 +150,8 @@ namespace spatiotemporal_vo
             solver.max_iters = std::stoi(value);
           else if (key == "lr")
             solver.lr = std::stod(value);
+          else if (key == "decay")
+            solver.decay = std::stod(value);
           else if (key == "epsilon_T")
             solver.epsilon_T = std::stod(value);
           else if (key == "trim_ratio")
@@ -231,9 +235,11 @@ namespace spatiotemporal_vo
     ofs << "solver:\n";
     ofs << "  max_iters: " << solver.max_iters << "\n";
     ofs << "  lr: " << solver.lr << "\n";
+    ofs << "  decay: " << solver.decay << "\n";
     ofs << "  epsilon_T: " << solver.epsilon_T << "\n";
     ofs << "  trim_ratio: " << solver.trim_ratio << "\n";
     ofs << "  convergence_thresh: " << solver.convergence_thresh << "\n\n";
+    ofs << "  regularization: " << solver.regularization << "\n\n";
 
     ofs << "camera:\n";
     ofs << "  fx: " << camera.fx << "\n";
