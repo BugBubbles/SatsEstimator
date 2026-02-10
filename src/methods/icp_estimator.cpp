@@ -424,7 +424,8 @@ namespace spatiotemporal_vo
 
     // 外层循环：多次重启以避免局部最优
     int num_restarts = 2; // 可以增加重启次数以提高鲁棒性
-
+    output.stats.time_taken = omp_get_wtime();
+    
     for (int restart = 0; restart < num_restarts; ++restart)
     {
       Eigen::Matrix3d R_current = Eigen::Matrix3d::Identity();
@@ -448,6 +449,7 @@ namespace spatiotemporal_vo
         R_best = R_current;
       }
     }
+    output.stats.time_taken = omp_get_wtime() - output.stats.time_taken;
 
     // 7. 将旋转矩阵转换为旋转向量
     SO3 so3_result(R_best);
@@ -457,10 +459,10 @@ namespace spatiotemporal_vo
     output.stats.loss = best_loss;
     output.stats.num_iterations = count_;
 
-    std::cout << "[" << count_ << "] "
+    std::cout << "[" << count_ << "] " << "<< STR >>" 
               << "Final loss: " << best_loss
               << " Optimized xi: " << output.twist.transpose() << std::endl;
-
+    std::cout << '[' << count_ << "] " << "<< STR >>" <<": Optimization took " << output.stats.time_taken << " seconds." << std::endl;
     count_++;
     return output;
   }
