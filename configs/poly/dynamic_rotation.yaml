@@ -1,0 +1,28 @@
+experiment_name: dynamic_rotation
+seed: 0
+
+paths:
+  data_root: /mnt/e/Datasets/Davis_240C
+  sequences: dynamic_rotation
+  output_root: ./results
+  suffix: dynamic_tm_sy
+
+data:
+  time_window: 0.005
+  event_count: 30000
+  unit_count: 2000
+  max_count: 15
+  adaptive_split: true
+  max_events: 200000000000
+  grid_size: 20
+
+camera:
+  width: 240
+  height: 180
+
+solver:
+    max_iters: 200
+    convergence_thresh: 1e-6
+    regularization: 2 # 200 is for ours
+    lr: 1.0
+    decay: 0.98

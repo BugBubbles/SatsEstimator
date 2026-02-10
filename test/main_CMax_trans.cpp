@@ -53,15 +53,15 @@ int main(int argc, char **argv)
 
     data_loader.projectEventsTo3D(events, config.camera);
 
-    data_loader.computeReferenceTime(events, "front");
+    data_loader.computeReferenceTime(events, "mean");
 
-    double time_span = events.t.back() - events.t.front();
+    double time_span = events.t_end - events.t_start;
     if (events.empty())
       continue;
 
     // 运行 PEME 估计
     RegistrationOutput result = estimator.run(config, events);
-    result.timespan = {t_start, t_start + time_span};
+    result.timespan = {events.t_start, events.t_end};
 
     if (logger.is_initialized())
     {

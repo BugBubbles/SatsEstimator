@@ -22,6 +22,7 @@ camera:
 
 solver:
     max_iters: 200
-    epsilon_T: 1e-6
-    trim_ratio: 1.0
-    lr: 1
+    convergence_thresh: 1e-6
+    regularization: 2 # 200 is for ours
+    lr: 1.0
+    decay: 0.98

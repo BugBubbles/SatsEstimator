@@ -64,7 +64,7 @@ double trigamma(double x) {
           return -trigamma(x + r)+trigamma(x+1); 
 #endif
         };
-      loss = iwe.unaryExpr(stppp_loss).mean();
+      loss = iwe.unaryExpr(stppp_loss).sum() / iwe.sum();
       grad = iwe.unaryExpr(stppp_grad);
       hess = iwe.unaryExpr(stppp_hess);
     }

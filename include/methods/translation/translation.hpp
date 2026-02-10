@@ -41,7 +41,7 @@ namespace spatiotemporal_vo
       // 运行优化
       result.stats.loss = final_loss_;
       result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
-      std::cout << "<<" << getMethodName() << ">>" << ": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
+      std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" << ": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
       // 填充结果
       result.trans = est_transAxis_;
@@ -106,11 +106,13 @@ namespace spatiotemporal_vo
       {
         iwe_grad_[i].setZero();
       }
+#ifdef ANALYTIC_HESSIAN
 #pragma omp parallel for
       for (int i = 0; i < 9; ++i)
       {
         iwe_hess_[i].setZero();
       }
+#endif
       double warped_x, warped_y, event_x, event_y;
       Eigen::Matrix<double, 2, 3> grad_warp;
       Mat3 hess_warp;
@@ -161,10 +163,12 @@ namespace spatiotemporal_vo
           assign_vec((-dy) * grad_warp.row(0) + (1 - dx) * grad_warp.row(1), iwe_grad_, x, y + 1);
           assign_vec(dy * grad_warp.row(0) + dx * grad_warp.row(1), iwe_grad_, x + 1, y + 1);
           // 计算海森矩阵
+#ifdef ANALYTIC_HESSIAN
           assign_mat(hess_warp, iwe_hess_, x, y);
           assign_mat(-hess_warp, iwe_hess_, x + 1, y);
           assign_mat(-hess_warp, iwe_hess_, x, y + 1);
           assign_mat(hess_warp, iwe_hess_, x + 1, y + 1);
+#endif
         }
       }
       blur_eigen_mat(warped_image_);
@@ -179,11 +183,13 @@ namespace spatiotemporal_vo
       }
 
 // 3. 模糊海森图
+#ifdef ANALYTIC_HESSIAN
 #pragma omp parallel for
       for (int k = 0; k < 9; ++k)
       {
         blur_eigen_mat(iwe_hess_[k]);
       }
+#endif
       // 计算最终的梯度与海森矩阵
       iwe_gradient(warped_image_, loss, pixel_grad_, pixel_hess_);
 // 计算总梯度，各个像素梯度的加权和
@@ -198,7 +204,11 @@ namespace spatiotemporal_vo
       {
         for (int j = 0; j < 3; ++j)
         {
+#ifdef ANALYTIC_HESSIAN
           hessian(i, j) = (pixel_grad_.array() * iwe_hess_[3 * i + j].array()).sum() + (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
+#else
+          hessian(i, j) = (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
+#endif
         }
       }
     }
@@ -209,7 +219,8 @@ namespace spatiotemporal_vo
       const int max_iterations = config.solver.max_iters;
       const double tolerance = config.solver.convergence_thresh;
       const double regularization = config.solver.regularization;
-      const double lr = config.solver.lr;
+      const double decay = config.solver.decay;
+      double lr = config.solver.lr;
       Mat3 hessian;
       Vec3 gradient;
       double best_loss = std::numeric_limits<double>::max();
@@ -229,7 +240,7 @@ namespace spatiotemporal_vo
         // hessian.diagonal().array() += (lambda * hessian.diagonal().cwiseAbs().array());
 #ifdef DEBUG
         std::cout << "[DEBUG] loss = " << loss << std::endl;
-        std::cout << "[DEBUG] gradient = " << gradient(2) << std::endl;
+        std::cout << "[DEBUG] gradient = " << gradient.transpose() << std::endl;
         std::cout << "[DEBUG] hessian :" << hessian << std::endl;
         Eigen::SelfAdjointEigenSolver<Mat3> eigensolver(hessian);
         std::cout << "[DEBUG] Hessian eigenvalues: " << eigensolver.eigenvalues().transpose() << std::endl;
@@ -243,9 +254,8 @@ namespace spatiotemporal_vo
         hessian(2, 2) += regularization * regular_hessian_2_2_;
 
         // 求解线性系统，LM算法
-        // step = hessian.ldlt().solve(-gradient); // 注意这里由于Hessian矩阵负定，所以取负号保持最小化方向
-        // est_transAxis_ += step;
-          // Adam优化器更新
+        // step = hessian.ldlt().solve(-gradient) * lr;
+        // Adam优化器更新
         m = beta1 * m + inv_beta1 * gradient;
         v = beta2 * v + inv_beta2 * gradient.array().square().matrix();
         beta1_T *= beta1;
@@ -264,6 +274,7 @@ namespace spatiotemporal_vo
           best_params = est_transAxis_;
         }
         prev_loss = loss;
+        lr *= decay;
 #ifdef DEBUG
         std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
         std::cout << "[DEBUG] Estimated translation velocity: " << est_transAxis_.transpose() << std::endl;

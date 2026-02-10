@@ -23,5 +23,6 @@ camera:
 solver:
     max_iters: 200
     convergence_thresh: 1e-6
-    regularization: 0 # 200 is for ours
-    lr: 0.05
+    regularization: 10 # 200 is for ours
+    lr: 1.0
+    decay: 0.98
