@@ -1,3 +1,6 @@
+# 设置可执行文件输出目录为 build/bin
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+
 # 定义一个函数来简化添加测试可执行文件
 function(add_test_executable TARGET_NAME SOURCE_FILE)
     add_executable(${TARGET_NAME} ${SOURCE_FILE})
