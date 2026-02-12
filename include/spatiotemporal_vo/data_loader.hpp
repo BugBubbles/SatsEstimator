@@ -37,12 +37,12 @@ namespace spatiotemporal_vo
     /**
      * @brief 自适应地获取事件数据包，保证每个包内的时间跨度不少于 min_delta_time 秒，且事件数在[min_count, max_count]范围内
      * @param min_delta_time 最小时间跨度
-     * @param max_count 最大事件数
+     * @param event_count 最大事件数
      * @param unit_count 基础事件数单位
      * @param adaptive_split 是否自适应分割
      * @param use_depth 是否使用深度信息（假设事件文件中包含深度数据）
      */
-    EventPacket getEventsInWindow(double min_delta_time, int max_count, int unit_count, bool adaptive_split, bool use_depth = false);
+    EventPacket getEventsInWindow(double min_delta_time, int event_count, int unit_count, bool adaptive_split, bool use_depth = false);
 
     /**
      * @brief 检查是否还有数据

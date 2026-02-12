@@ -195,8 +195,6 @@ namespace spatiotemporal_vo
             data.event_count = std::stoi(value);
           else if (key == "grid_size")
             data.grid_size = std::stoi(value);
-          else if (key == "max_count")
-            data.max_count = std::stoi(value);
           else if (key == "unit_count")
             data.unit_count = std::stoi(value);
           else if (key == "adaptive_split")
@@ -263,7 +261,6 @@ namespace spatiotemporal_vo
     ofs << "  max_events: " << data.max_events << "\n";
     ofs << "  event_count: " << data.event_count << "\n\n";
     ofs << "  grid_size: " << data.grid_size << "\n";
-    ofs << "  max_count: " << data.max_count << "\n";
     ofs << "  unit_count: " << data.unit_count << "\n";
     ofs << "  adaptive_split: " << (data.adaptive_split ? "true" : "false") << "\n";
 
@@ -306,7 +303,6 @@ namespace spatiotemporal_vo
     std::cout << "  max_events: " << data.max_events << std::endl;
     std::cout << "  event_count: " << data.event_count << std::endl;
     std::cout << "  grid_size: " << data.grid_size << std::endl;
-    std::cout << "  max_count: " << data.max_count << std::endl;
     std::cout << "  unit_count: " << data.unit_count << std::endl;
     std::cout << "  adaptive_split: " << (data.adaptive_split ? "true" : "false") << std::endl;
 

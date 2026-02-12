@@ -104,14 +104,14 @@ namespace spatiotemporal_vo
     return events_buffer_.copy();
   }
 
-  EventPacket DataLoader::getEventsInWindow(double min_timespan, int max_count, int unit_count, bool adaptive_split, bool use_depth)
+  EventPacket DataLoader::getEventsInWindow(double min_timespan, int event_count, int unit_count, bool adaptive_split, bool use_depth)
   {
     std::string line;
 
     if (!adaptive_split)
-    { // 此时只需要保证划分事件个数都取到最大的max_count即可，不需要考虑时间跨度
+    { // 此时只需要保证划分事件个数都取到最大的event_count即可，不需要考虑时间跨度
       events_buffer_.clear();
-      while (std::getline(all_events_, line) && events_buffer_.size() < max_count * unit_count)
+      while (std::getline(all_events_, line) && events_buffer_.size() < event_count)
       {
         if (line.empty() || line[0] == '#' || line[0] == '%')
           continue;
@@ -145,7 +145,7 @@ namespace spatiotemporal_vo
     else
     {
       // 自适应划分，每次获取 unit_count 个事件，计算由这些事件构成的状态量
-      // 保证时间跨度不少于 min_delta_time，且事件数在[min_count, max_count]范围内
+      // 保证时间跨度不少于 min_delta_time，且事件数在[min_count * unit_cout, event_count]范围内
       // 当状态量的变化超过粗大误差的t分布置信区间时，停止采样
       EventPacket packet;
       while (hasNext())
@@ -196,7 +196,7 @@ namespace spatiotemporal_vo
           double std = std::sqrt(std::accumulate(score_var_.begin(), score_var_.end(), 0.0) / num_scores - mean * mean);
           // 计算当前自由度下的t分布置信区间
           double t_threshold = t_ppf_[std::min(score_.size() - 2, t_ppf_.size() - 1)];
-          if ((std::abs(metric - mean) < t_threshold * std * min_timespan / (packet.t_end - packet.t_start) && score_.size() < max_count) || (events_buffer_.t_end - events_buffer_.t_start < min_timespan))
+          if ((std::abs(metric - mean) < t_threshold * std * min_timespan / (packet.t_end - packet.t_start) && score_.size() < event_count / unit_count) || (events_buffer_.t_end - events_buffer_.t_start < min_timespan))
           {
             events_buffer_ += packet;
             score_.push_back(metric);

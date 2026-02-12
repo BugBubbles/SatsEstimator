@@ -57,7 +57,6 @@ struct DataConfig {
     int event_count = event_count;           // 数量窗口
     int grid_size = 20;                    // 网格大小
     // 用于自适应窗口划分的参数
-    int max_count =15;
     int unit_count =2000;
     bool adaptive_split = true;      // 是否使用自适应窗口划分
 };

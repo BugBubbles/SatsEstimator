@@ -44,7 +44,7 @@ int main(int argc, char **argv)
   {
     EventPacket events = data_loader.getEventsInWindow(
         config.data.time_window,
-        config.data.max_count, 
+        config.data.event_count, 
         config.data.unit_count,
         config.data.adaptive_split);
 

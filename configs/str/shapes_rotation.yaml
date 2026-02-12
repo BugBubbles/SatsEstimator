@@ -1,18 +1,20 @@
-experiment_name: pemep_vo
+experiment_name: shapes_rotation
 seed: 0
 
 paths:
-  data_root: /mnt/e/Datasets/Davis_240C
-  sequences: poster_rotation
+  data_root: /Datadisk/datasets/Davis_240C
+  sequences: shapes_rotation
   output_root: ./results
-  suffix: poster_sy
+  suffix: shapes_sn
 
 data:
-  time_window: 0.005
+  time_window: -1
   event_count: 30000
+  unit_count: 2000
+  is_adaptive: false
   max_events: 200000000000
   grid_size: 20
-  
+
 camera:
   width: 240
   height: 180
@@ -21,4 +23,4 @@ solver:
     max_iters: 200
     epsilon_T: 0.02
     trim_ratio: 1.0
-    lr: 1
+    lr: 1.0
