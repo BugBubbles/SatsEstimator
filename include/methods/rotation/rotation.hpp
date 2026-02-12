@@ -9,10 +9,10 @@ namespace spatiotemporal_vo
    * @brief CMax (Contrast Maximization) 估计器
    * 基于时间表面的对比度最大化方法
    */
-  class RotationEstimator : public MotionEstimator
+  class RotationEstimator : public MotionEstimator<3>
   {
     public:
-    using MotionEstimator::MotionEstimator; // 继承所有基类构造函数
+    using MotionEstimator<3>::MotionEstimator; // 继承所有基类构造函数
     protected:
     void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Mat3 &hess_warp) const
     {

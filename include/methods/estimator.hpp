@@ -12,6 +12,7 @@ namespace spatiotemporal_vo
   /**
    * @brief
    */
+   template<int N>
   class MotionEstimator
   {
   public:
@@ -22,7 +23,27 @@ namespace spatiotemporal_vo
      * @param width, height 图像尺寸
      */
     MotionEstimator(double fx, double fy, double cx, double cy,
-                      int width, int height);
+                      int width, int height)      : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
+  {
+    // 初始化梯度和海森矩阵图像容器
+      warped_image_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      pixel_grad_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      pixel_hess_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      iwe_grad_.resize(N);
+#ifdef ANALYTIC_HESSIAN
+      iwe_hess_.resize(N * N);
+#endif
+      for (int i = 0; i < N; ++i)
+      {
+        iwe_grad_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      }
+#ifdef ANALYTIC_HESSIAN
+      for (int i = 0; i < N * N; ++i)
+      {
+        iwe_hess_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      }
+#endif
+  };
 
     /**
      * @brief 虚析构函数
@@ -35,17 +56,55 @@ namespace spatiotemporal_vo
      * @param config 配置对象
      * @return 估计结果
      */
-    virtual RegistrationOutput run(const Config &config, const EventPacket &packet);
+    virtual RegistrationOutput run(const Config &config, const EventPacket &packet)
+  {
+    points_ = &packet.coord_3d;
+    delta_time_ = &packet.t;
+    polarity_ = &packet.polarity;
+    n_points_ = points_->size();
 
+    RegistrationOutput result;
+
+    if (n_points_ < 10)
+    {
+      result.twist.setZero();
+      result.stats.loss = 0;
+      result.stats.time_taken = 0.0;
+      result.stats.num_iterations = 0;
+      return result;
+    }
+
+    std::cout << '[' << count_ << "] " <<  "<<" << getMethodName() << ">>" << ": Processing "
+              << n_points_ << " events, duration: "
+              << delta_time_->back() - delta_time_->front()<< "s" << std::endl;
+    result.stats.time_taken = omp_get_wtime();
+
+    // 运行优化
+    MainOptimize(config);
+
+    // 更新结果
+#ifdef DEBUG
+    std::cout << "[DEBUG] Final estimated parammeters: " << est_angleAxis_.transpose() << std::endl;
+#endif
+    // 运行优化
+    result.stats.loss = final_loss_;
+    result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
+    std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" <<": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
+
+    // 填充结果
+    result.twist = est_angleAxis_;
+    result.stats.num_iterations = count_;
+
+    std::cout << '[' << count_ << "] " <<   "<<" << getMethodName() << ">>" <<": Estimated parammeters: "
+              << est_angleAxis_.transpose()
+              << ", best loss: " << result.stats.loss << std::endl;
+    count_++;
+    return result;
+  };
     /**
      * @brief 获取当前估计的角速度
      */
-    Vec3 getEstimatedAngular() const { return est_angleAxis_; }
-
-    /**
-     * @brief 获取当前估计的平移速度
-     */
-    Vec3 getEstimatedTranslation() const { return est_transAxis_; }
+    Vec3 getEstimatedParameters() const { return est_angleAxis_; }
 
     /**
      * @brief 获取最终损失值
@@ -66,7 +125,7 @@ namespace spatiotemporal_vo
     int n_points_;
     double final_loss_ = 0.0;
     EigenMat warped_image_, pixel_grad_, pixel_hess_;
-    Vec3 est_angleAxis_, est_transAxis_; // 当前估计的角速度
+    Eigen::Matrix<double, N, 1> est_angleAxis_, est_transAxis_; // 当前估计的角速度
     // 估计状态
     int count_;
 
@@ -86,15 +145,63 @@ namespace spatiotemporal_vo
      * @param xs, ys 翘曲后的事件点（2D坐标），注意，这里的坐标是减去u0 v0后的坐标
      * @param grad_warp 输出的梯度矩阵，大小为2x3
      */
-    virtual void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Mat3 &hess_warp) const = 0;
+    virtual void warp_gradient(const Eigen::Matrix<double, N, 1> &parameters, const Eigen::Matrix<double, N, 1> &point, double dt, Eigen::Matrix<double, 2, N> &grad_warp, Eigen::Matrix<double, N, N> &hess_warp) const = 0;
 
     /**
      * @brief 核心优化函数
      * @param config 配置对象
      * @return 损失函数值
      */
-    virtual void MainOptimize(const Config &config);
+    virtual void MainOptimize(const Config &config)
+    {
+      // 使用牛顿法进行优化
+      const int max_iterations = config.solver.max_iters;
+      const double tolerance = config.solver.convergence_thresh;
+      const double decay = config.solver.decay;
+      double lr = config.solver.lr;
+      Mat3 hessian;
+      Vec3 gradient;
+      double best_loss = std::numeric_limits<double>::max();
+      double loss, lambda = 1.0, prev_loss = best_loss;
+      Vec3 best_params = est_angleAxis_, step;
+      for (int iter = 0; iter < max_iterations; ++iter)
+      {
+        compute_gradient(est_angleAxis_, loss, gradient, hessian);
+#ifdef DEBUG
+        std::cout << "[DEBUG] loss = " << loss << std::endl;
+        std::cout << "[DEBUG] gradient = " << gradient.transpose() << std::endl;
+        std::cout << "[DEBUG] hessian :" << hessian << std::endl;
+        Eigen::SelfAdjointEigenSolver<Mat3> eigensolver(hessian);
+        std::cout << "[DEBUG] Hessian eigenvalues: " << eigensolver.eigenvalues().transpose() << std::endl;
+#endif
+        // 添加阻尼项以确保Hessian矩阵是正定的
+        // hessian.diagonal().array() += (lambda * hessian.diagonal().mean());
 
+        // 求解线性系统
+        step = hessian.ldlt().solve(-gradient) * lr;
+        est_angleAxis_ += step;
+        // 检查收敛性
+        if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
+        {
+          break;
+        }
+        // 更新参数
+        if (best_loss > loss)
+        {
+          best_loss = loss;
+          best_params = est_angleAxis_;
+        }
+        lr *= decay; // 减小学习率
+        prev_loss = loss;
+#ifdef DEBUG
+        std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
+        std::cout << "[DEBUG] Estimated Parameters: " << est_angleAxis_.transpose() << std::endl;
+#endif
+      }
+      // 计算最终损失
+      est_angleAxis_ = best_params;
+      final_loss_ = best_loss;
+    };
     /**
      * @brief 计算损失函数对运动参数的梯度和海森矩阵
      * @param parameters 运动参数（角轴表示法）
@@ -102,16 +209,16 @@ namespace spatiotemporal_vo
      * @param gradient 输出的梯度
      * @param hessian 输出的海森矩阵
      */
-    virtual void compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Mat3 &hessian) = 0;
+    virtual void compute_gradient(const Eigen::Matrix<double, N, 1> &parameters, double &loss, Eigen::Matrix<double, N, 1> &gradient, Eigen::Matrix<double, N, N> &hessian) = 0;
 
     /**
      * @brief 将向量值分配到对应的矩阵位置
      * @param vec 输入向量
      * @param mat_vec 矩阵向量
      */
-    inline void assign_vec(const Vec3 &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
+    inline void assign_vec(const Eigen::Matrix<double, N, 1> &vec, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
-      for (int i = 0; i < 3; ++i)
+      for (int i = 0; i < N; ++i)
       {
         mat_vec[i](y, x) += vec(i);
       }
@@ -121,11 +228,11 @@ namespace spatiotemporal_vo
      * @param mat 输入矩阵
      * @param mat_vec 矩阵向量
      */
-    inline void assign_mat(const Mat3 &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
+    inline void assign_mat(const Eigen::Matrix<double, N, N> &mat, std::vector<EigenMat> &mat_vec, int x, int y) const
     {
-      for (int i = 0; i < 3; ++i)
+      for (int i = 0; i < N; ++i)
       {
-        for (int j = 0; j < 3; ++j)
+        for (int j = 0; j < N; ++j)
         {
           mat_vec[i * 3 + j](y, x) += mat(i, j);
         }

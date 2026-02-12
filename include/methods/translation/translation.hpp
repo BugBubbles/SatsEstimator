@@ -5,10 +5,10 @@
 namespace spatiotemporal_vo
 {
 
-  class TranslationEstimator : public MotionEstimator
+  class TranslationEstimator : public MotionEstimator<3>
   {
   public:
-    using MotionEstimator::MotionEstimator; // 继承所有基类构造函数
+    using MotionEstimator<3>::MotionEstimator; // 继承所有基类构造函数
     RegistrationOutput run(const Config &config, const EventPacket &packet) override
     {
       points_ = &packet.coord_3d;
