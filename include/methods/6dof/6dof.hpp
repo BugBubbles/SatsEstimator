@@ -16,8 +16,8 @@ namespace spatiotemporal_vo
     {
       double X_Z = point(0) / point(2);
       double Y_Z = point(1) / point(2);
-      grad_warp << fx_ / point(2), 0, -fx_ * X_Z / point(2), fx_ * X_Z * Y_Z, -fx_ * (1 + X_Z * X_Z), fx_ * Y_Z,
-          0, fy_ / point(2), -fy_ * Y_Z / point(2), fy_ * (1 + Y_Z * Y_Z), -fy_ * X_Z * Y_Z, -fy_ * X_Z;
+      grad_warp << -fx_ / point(2), 0, fx_ * X_Z / point(2), fx_ * X_Z * Y_Z, -fx_ * (1 + X_Z * X_Z), fx_ * Y_Z,
+          0, -fy_ / point(2), fy_ * Y_Z / point(2), fy_ * (1 + Y_Z * Y_Z), -fy_ * X_Z * Y_Z, -fy_ * X_Z;
       grad_warp *= dt;
       hess_warp = grad_warp.row(0).transpose() * grad_warp.row(1) + grad_warp.row(1).transpose() * grad_warp.row(0);
     }
@@ -78,9 +78,9 @@ namespace spatiotemporal_vo
         delta_points_rot(1) = parameters[5] * point_(0) - parameters[3] * point_(2);
         delta_points_rot(2) = -parameters[4] * point_(0) + parameters[3] * point_(1);
 
-        delta_points_trans(0) = -parameters[0];
-        delta_points_trans(1) = -parameters[1];
-        delta_points_trans(2) = -parameters[2];
+        delta_points_trans(0) = parameters[0];
+        delta_points_trans(1) = parameters[1];
+        delta_points_trans(2) = parameters[2];
 
         // 计算 warp 后的 3D 点
         double dt = delta_time_->at(i);

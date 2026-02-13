@@ -60,7 +60,7 @@ namespace spatiotemporal_vo
       double Y_Z = point(1) / point(2);
       grad_warp << -fx_ / point(2), 0, fx_ * X_Z / point(2),
                     0, -fy_ / point(2), fy_ * Y_Z / point(2);
-      grad_warp *= -dt;
+      grad_warp *= dt;
       hess_warp = grad_warp.row(0).transpose() * grad_warp.row(1) + grad_warp.row(1).transpose() * grad_warp.row(0);
     }
     void compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Mat3 &hessian) override
@@ -124,7 +124,7 @@ namespace spatiotemporal_vo
         // 计算 warp 后的 3D 点
         double dt = delta_time_->at(i);
         // double dt_sq = 0.5 * dt * dt;
-        points_T = point_ - parameters * dt;
+        points_T = point_ + parameters * dt;
 
         // 投影到 2D
         warped_x = points_T(0) / points_T(2) * fx_ + cx_ + padding_;
