@@ -60,12 +60,12 @@ int main(int argc, char **argv)
       continue;
 
     // 运行 PEME 估计
-    RegistrationOutput result = estimator.run(config, events);
+    RegistrationOutput<3> result = estimator.run(config, events);
     result.timespan = {t_start, t_start + time_span};
 
     if (logger.is_initialized())
     {
-      logger.log(result, LogMode::Translation);
+      logger.log<3>(result);
     }
     t_start += time_span;
     frame_count++;

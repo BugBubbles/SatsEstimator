@@ -49,7 +49,7 @@ namespace spatiotemporal_vo
      * @param polarity 事件极性
      * @return 估计结果
      */
-    RegistrationOutput run(const std::vector<Vec2> &xy,
+    RegistrationOutput<3> run(const std::vector<Vec2> &xy,
                            const std::vector<double> &timestamps,
                            const std::vector<int> &polarity,
                            const std::vector<double> &depth);

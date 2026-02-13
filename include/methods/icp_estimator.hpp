@@ -17,7 +17,7 @@ namespace spatiotemporal_vo
     SpatioTemporalRegistration(
         double fx, double fy, double cx, double cy, const Config &cfg);
 
-    RegistrationOutput run(
+    RegistrationOutput<3> run(
         const std::vector<Eigen::Vector2d> &events_xy,
         const std::vector<double> &events_t,
         const std::vector<int> &polarity,

@@ -23,7 +23,7 @@ namespace spatiotemporal_vo
      * @param width, height 图像尺寸
      */
     MotionEstimator(double fx, double fy, double cx, double cy,
-                      int width, int height)      : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
+                      int width, int height) : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
   {
     // 初始化梯度和海森矩阵图像容器
       warped_image_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
@@ -56,18 +56,18 @@ namespace spatiotemporal_vo
      * @param config 配置对象
      * @return 估计结果
      */
-    virtual RegistrationOutput run(const Config &config, const EventPacket &packet)
+    virtual RegistrationOutput<N> run(const Config &config, const EventPacket &packet)
   {
     points_ = &packet.coord_3d;
     delta_time_ = &packet.t;
     polarity_ = &packet.polarity;
     n_points_ = points_->size();
 
-    RegistrationOutput result;
+    RegistrationOutput<N> result;
 
     if (n_points_ < 10)
     {
-      result.twist.setZero();
+      result.params.setZero();
       result.stats.loss = 0;
       result.stats.time_taken = 0.0;
       result.stats.num_iterations = 0;
@@ -84,7 +84,7 @@ namespace spatiotemporal_vo
 
     // 更新结果
 #ifdef DEBUG
-    std::cout << "[DEBUG] Final estimated parammeters: " << est_angleAxis_.transpose() << std::endl;
+    std::cout << "[DEBUG] Final estimated parammeters: " << est_params_.transpose() << std::endl;
 #endif
     // 运行优化
     result.stats.loss = final_loss_;
@@ -92,11 +92,11 @@ namespace spatiotemporal_vo
     std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" <<": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
     // 填充结果
-    result.twist = est_angleAxis_;
+    result.params = est_params_;
     result.stats.num_iterations = count_;
 
     std::cout << '[' << count_ << "] " <<   "<<" << getMethodName() << ">>" <<": Estimated parammeters: "
-              << est_angleAxis_.transpose()
+              << est_params_.transpose()
               << ", best loss: " << result.stats.loss << std::endl;
     count_++;
     return result;
@@ -104,7 +104,7 @@ namespace spatiotemporal_vo
     /**
      * @brief 获取当前估计的角速度
      */
-    Vec3 getEstimatedParameters() const { return est_angleAxis_; }
+    Eigen::Matrix<double, N, 1> getEstimatedParameters() const { return est_params_; }
 
     /**
      * @brief 获取最终损失值
@@ -125,7 +125,7 @@ namespace spatiotemporal_vo
     int n_points_;
     double final_loss_ = 0.0;
     EigenMat warped_image_, pixel_grad_, pixel_hess_;
-    Eigen::Matrix<double, N, 1> est_angleAxis_, est_transAxis_; // 当前估计的角速度
+    Eigen::Matrix<double, N, 1> est_params_; // 当前估计的角速度
     // 估计状态
     int count_;
 
@@ -145,7 +145,7 @@ namespace spatiotemporal_vo
      * @param xs, ys 翘曲后的事件点（2D坐标），注意，这里的坐标是减去u0 v0后的坐标
      * @param grad_warp 输出的梯度矩阵，大小为2x3
      */
-    virtual void warp_gradient(const Eigen::Matrix<double, N, 1> &parameters, const Eigen::Matrix<double, N, 1> &point, double dt, Eigen::Matrix<double, 2, N> &grad_warp, Eigen::Matrix<double, N, N> &hess_warp) const = 0;
+    virtual void warp_gradient(const Eigen::Matrix<double, N, 1> &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, N> &grad_warp, Eigen::Matrix<double, N, N> &hess_warp) const = 0;
 
     /**
      * @brief 核心优化函数
@@ -159,19 +159,19 @@ namespace spatiotemporal_vo
       const double tolerance = config.solver.convergence_thresh;
       const double decay = config.solver.decay;
       double lr = config.solver.lr;
-      Mat3 hessian;
-      Vec3 gradient;
+      Eigen::Matrix<double, N, N> hessian;
+      Eigen::Matrix<double, N, 1> gradient;
       double best_loss = std::numeric_limits<double>::max();
       double loss, lambda = 1.0, prev_loss = best_loss;
-      Vec3 best_params = est_angleAxis_, step;
+      Eigen::Matrix<double, N, 1> best_params = est_params_, step;
       for (int iter = 0; iter < max_iterations; ++iter)
       {
-        compute_gradient(est_angleAxis_, loss, gradient, hessian);
+        compute_gradient(est_params_, loss, gradient, hessian);
 #ifdef DEBUG
         std::cout << "[DEBUG] loss = " << loss << std::endl;
         std::cout << "[DEBUG] gradient = " << gradient.transpose() << std::endl;
         std::cout << "[DEBUG] hessian :" << hessian << std::endl;
-        Eigen::SelfAdjointEigenSolver<Mat3> eigensolver(hessian);
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, N, N>> eigensolver(hessian);
         std::cout << "[DEBUG] Hessian eigenvalues: " << eigensolver.eigenvalues().transpose() << std::endl;
 #endif
         // 添加阻尼项以确保Hessian矩阵是正定的
@@ -179,7 +179,7 @@ namespace spatiotemporal_vo
 
         // 求解线性系统
         step = hessian.ldlt().solve(-gradient) * lr;
-        est_angleAxis_ += step;
+        est_params_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
         {
@@ -189,17 +189,17 @@ namespace spatiotemporal_vo
         if (best_loss > loss)
         {
           best_loss = loss;
-          best_params = est_angleAxis_;
+          best_params = est_params_;
         }
         lr *= decay; // 减小学习率
         prev_loss = loss;
 #ifdef DEBUG
         std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
-        std::cout << "[DEBUG] Estimated Parameters: " << est_angleAxis_.transpose() << std::endl;
+        std::cout << "[DEBUG] Estimated Parameters: " << est_params_.transpose() << std::endl;
 #endif
       }
       // 计算最终损失
-      est_angleAxis_ = best_params;
+      est_params_ = best_params;
       final_loss_ = best_loss;
     };
     /**

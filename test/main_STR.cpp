@@ -69,7 +69,7 @@ int main(int argc, char **argv)
 
     // 执行配准
     std::vector<double> dummy_depth; // 空深度，使用默认值 1.0
-    RegistrationOutput result = registration.run(
+    RegistrationOutput<3> result = registration.run(
         events.xy,
         events.t,
         events.polarity,
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 
     if (logger.is_initialized())
     {
-      logger.log(result, LogMode::Rotation);
+      logger.log<3>(result);
     }
   }
 

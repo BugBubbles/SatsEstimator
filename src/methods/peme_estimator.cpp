@@ -405,17 +405,17 @@ namespace spatiotemporal_vo
     return best_loss;
   }
 
-  RegistrationOutput PEMEEstimator::run(const std::vector<Vec2> &xy,
+  RegistrationOutput<3> PEMEEstimator::run(const std::vector<Vec2> &xy,
                                         const std::vector<double> &timestamps,
                                         const std::vector<int> &polarity,
                                         const std::vector<double> &depth)
   {
-    RegistrationOutput result;
+    RegistrationOutput<3> result;
     result.timespan = {timestamps.front(), timestamps.back()};
 
     if (xy.empty())
     {
-      result.twist.setZero();
+      result.params.setZero();
       result.stats.loss = 0;
       result.stats.num_iterations = 0;
       return result;
@@ -447,7 +447,7 @@ namespace spatiotemporal_vo
     result.stats.loss = optimizeMotion();
 
     // 填充结果
-    result.twist = est_angleAxis_;
+    result.params = est_angleAxis_;
     result.stats.num_iterations = count_;
 
     std::cout << '[' << count_ << "] " << "PEME: Estimated angular velocity: "

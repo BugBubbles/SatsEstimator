@@ -29,52 +29,6 @@ namespace spatiotemporal_vo
     std::cout << "Logger initialized: " << filepath << std::endl;
   }
 
-  void ResultLogger::log(const RegistrationOutput &output, LogMode mode)
-  {
-    if (!is_initialized_ || !log_file_.is_open())
-    {
-      std::cerr << "Logger not initialized!" << std::endl;
-      return;
-    }
-
-    // 格式: idx time1 time2 runtime twist1 twist2 twist3
-    log_file_ << std::fixed << output.stats.num_iterations << " "
-              << std::setprecision(9)
-              << output.timespan.first << " "
-              << output.timespan.second << " "
-              << output.stats.time_taken << " ";
-    switch (mode)
-    {
-    case LogMode::Rotation :{
-    log_file_ << output.twist(0) << " "
-              << output.twist(1) << " "
-              << output.twist(2) << std::endl;
-              break;
-    }
-    case LogMode::Translation :{
-    log_file_ << output.trans(0) << " "
-              << output.trans(1) << " "
-              << output.trans(2) << std::endl;
-              break;
-    }
-    case LogMode::SixDof :{
-    log_file_ << output.twist(0) << " "
-              << output.twist(1) << " "
-              << output.twist(2) << " "
-              << output.trans(0) << " "
-              << output.trans(1) << " "
-              << output.trans(2) << std::endl;
-              break;
-    }
-    default:
-    {
-      log_file_ << "Invalid LogMode!" << std::endl;
-    }
-  }
-    // 刷新一次
-    log_file_.flush();
-  }
-
   bool ResultLogger::createDirectory(const std::string &path)
   {
     // 简单的目录创建（仅支持单级目录）

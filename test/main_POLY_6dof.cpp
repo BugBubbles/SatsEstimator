@@ -46,13 +46,14 @@ int main(int argc, char **argv)
         config.data.time_window,
         config.data.event_count, 
         config.data.unit_count,
-        config.data.adaptive_split);
+        config.data.adaptive_split,
+      true);
 
     data_loader.undistortEvents(events, config.camera);
 
     data_loader.projectEventsTo3D(events, config.camera);
 
-    data_loader.computeReferenceTime(events, "front");
+    data_loader.computeReferenceTime(events, "mean");
 
     double time_span = events.t_end - events.t_start;
     if (events.empty())
@@ -61,12 +62,12 @@ int main(int argc, char **argv)
     std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
 
     // 运行 PEME 估计
-    RegistrationOutput result = estimator.run(config, events);
+    RegistrationOutput<6> result = estimator.run(config, events);
     result.timespan = {events.t_start, events.t_end};
 
     if (logger.is_initialized())
     {
-      logger.log(result, LogMode::SixDof);
+      logger.log<6>(result);
     }
     t_start += time_span;
     frame_count++;

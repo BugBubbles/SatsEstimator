@@ -5,13 +5,6 @@
 #include <fstream>
 namespace spatiotemporal_vo
 {
-  enum LogMode
-  {
-    Rotation,
-    SixDof,
-    Translation
-  };
-
   /**
    * @brief 简化的可视化器 (仅使用 OpenCV)
    */
@@ -33,7 +26,25 @@ namespace spatiotemporal_vo
      * @brief 记录日志
      * @param output 优化器输出结果
      */
-    void log(const RegistrationOutput &output, LogMode mode);
+    template<int N>
+    void log(const RegistrationOutput<N> &output)
+      {
+    if (!is_initialized_ || !log_file_.is_open())
+    {
+      std::cerr << "Logger not initialized!" << std::endl;
+      return;
+    }
+
+    // 格式: idx time1 time2 runtime (trans1 trans2 trans3) twist1 twist2 twist3
+    log_file_ << std::fixed << output.stats.num_iterations << " "
+              << std::setprecision(9)
+              << output.timespan.first << " "
+              << output.timespan.second << " "
+              << output.stats.time_taken << " " 
+              << output.params.transpose() << std::endl;
+    // 刷新一次
+    log_file_.flush();
+  };
     /**
      * @brief 关闭日志文件
      */

@@ -309,13 +309,13 @@ namespace spatiotemporal_vo
   }
   // 主运行函数（使用 Go-ICP 风格的 ICP）
   // ============================================================================
-  RegistrationOutput SpatioTemporalRegistration::run(
+  RegistrationOutput<3> SpatioTemporalRegistration::run(
       const std::vector<Vec2> &events_xy,
       const std::vector<double> &events_t,
       const std::vector<int> &polarity,
       const std::vector<double> &depth_in)
   {
-    RegistrationOutput output;
+    RegistrationOutput<3> output;
 
     if (events_t.empty())
     {
@@ -455,13 +455,13 @@ namespace spatiotemporal_vo
     SO3 so3_result(R_best);
 
     // 8. 输出结果
-    output.twist = -so3_result.log() / dt * 2.0;
+    output.params = -so3_result.log() / dt * 2.0;
     output.stats.loss = best_loss;
     output.stats.num_iterations = count_;
 
     std::cout << "[" << count_ << "] " << "<< STR >>" 
               << "Final loss: " << best_loss
-              << " Optimized xi: " << output.twist.transpose() << std::endl;
+              << " Optimized xi: " << output.params.transpose() << std::endl;
     std::cout << '[' << count_ << "] " << "<< STR >>" <<": Optimization took " << output.stats.time_taken << " seconds." << std::endl;
     count_++;
     return output;

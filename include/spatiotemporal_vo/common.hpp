@@ -38,10 +38,10 @@ namespace spatiotemporal_vo
     int num_iterations = 0;
   };
 
+  template<int N>
   struct RegistrationOutput
   {
-    Vec3 trans = Vec3::Zero();
-    Vec3 twist = Vec3::Zero();
+    Eigen::Matrix<double, N, 1> params = Eigen::Matrix<double, N, 1>::Zero();
     RegistrationStats stats;
     std::pair<double, double> timespan = {0.0, 0.0};
   };

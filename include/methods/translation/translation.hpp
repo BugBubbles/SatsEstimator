@@ -9,18 +9,18 @@ namespace spatiotemporal_vo
   {
   public:
     using MotionEstimator<3>::MotionEstimator; // 继承所有基类构造函数
-    RegistrationOutput run(const Config &config, const EventPacket &packet) override
+    RegistrationOutput<3> run(const Config &config, const EventPacket &packet) override
     {
       points_ = &packet.coord_3d;
       delta_time_ = &packet.t;
       polarity_ = &packet.polarity;
       n_points_ = points_->size();
 
-      RegistrationOutput result;
+      RegistrationOutput<3> result;
 
       if (n_points_ < 10)
       {
-        result.twist.setZero();
+        result.params.setZero();
         result.stats.loss = 0;
         result.stats.time_taken = 0.0;
         result.stats.num_iterations = 0;
@@ -36,7 +36,7 @@ namespace spatiotemporal_vo
 
       // 更新结果
 #ifdef DEBUG
-      std::cout << "[DEBUG] Final estimated translation velocity: " << est_transAxis_.transpose() << std::endl;
+      std::cout << "[DEBUG] Final estimated translation velocity: " << est_params_.transpose() << std::endl;
 #endif
       // 运行优化
       result.stats.loss = final_loss_;
@@ -44,11 +44,11 @@ namespace spatiotemporal_vo
       std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" << ": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
       // 填充结果
-      result.trans = est_transAxis_;
+      result.params = est_params_;
       result.stats.num_iterations = count_;
 
       std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" << ": Estimated translation velocity: "
-                << est_transAxis_.transpose()
+                << est_params_.transpose()
                 << ", best loss: " << result.stats.loss << std::endl;
       count_++;
       return result;
@@ -60,7 +60,7 @@ namespace spatiotemporal_vo
       double Y_Z = point(1) / point(2);
       grad_warp << -fx_ / point(2), 0, fx_ * X_Z / point(2),
                     0, -fy_ / point(2), fy_ * Y_Z / point(2);
-      grad_warp *= dt;
+      grad_warp *= -dt;
       hess_warp = grad_warp.row(0).transpose() * grad_warp.row(1) + grad_warp.row(1).transpose() * grad_warp.row(0);
     }
     void compute_gradient(const Vec3 &parameters, double &loss, Vec3 &gradient, Mat3 &hessian) override
@@ -137,7 +137,7 @@ namespace spatiotemporal_vo
         huber_loss(res, huber_val, huber_grad, huber_sec_grad);
         regular_loss_ += huber_val;
         regular_gradient_2_ += huber_grad * grad * (points_T(2) > 0 ? 1 : -1);
-        regular_hessian_2_2_ += (huber_grad * grad * grad * (points_T(2) > 0 ? 1 : -1) + huber_sec_grad * grad * (points_T(2) > 0 ? 1 : -1));
+        regular_hessian_2_2_ += (huber_grad + huber_sec_grad) * grad * grad;
 
         // 使用双线性插值将当前事件翘曲至图像
         int x = static_cast<int>(floor(warped_x));
@@ -225,7 +225,7 @@ namespace spatiotemporal_vo
       Vec3 gradient;
       double best_loss = std::numeric_limits<double>::max();
       double loss = 0.0, lambda = 1.5, prev_loss = best_loss;
-      Vec3 step, best_params = est_transAxis_;
+      Vec3 step, best_params = est_params_;
 
       //Adam优化器参数
       Vec3 m = Vec3::Zero(), v = Vec3::Zero();
@@ -234,7 +234,7 @@ namespace spatiotemporal_vo
       double beta1_T = beta1, beta2_T = beta2;
       for (int iter = 0; iter < max_iterations; ++iter)
       {
-        compute_gradient(est_transAxis_, loss, gradient, hessian);
+        compute_gradient(est_params_, loss, gradient, hessian);
 
         // 添加阻尼项以确保Hessian矩阵是正定的
         // hessian.diagonal().array() += (lambda * hessian.diagonal().cwiseAbs().array());
@@ -254,14 +254,14 @@ namespace spatiotemporal_vo
         hessian(2, 2) += regularization * regular_hessian_2_2_;
 
         // 求解线性系统，LM算法
-        // step = hessian.ldlt().solve(-gradient) * lr;
+        step = hessian.ldlt().solve(-gradient) * lr;
         // Adam优化器更新
-        m = beta1 * m + inv_beta1 * gradient;
-        v = beta2 * v + inv_beta2 * gradient.array().square().matrix();
-        beta1_T *= beta1;
-        beta2_T *= beta2;
-        step = -lr * m.array() / (v.array().sqrt() + epsilon) * (std::sqrt(1 - beta2_T) / (1 - beta1_T));
-        est_transAxis_ += step;
+        // m = beta1 * m + inv_beta1 * gradient;
+        // v = beta2 * v + inv_beta2 * gradient.array().square().matrix();
+        // beta1_T *= beta1;
+        // beta2_T *= beta2;
+        // step = -lr * m.array() / (v.array().sqrt() + epsilon) * (std::sqrt(1 - beta2_T) / (1 - beta1_T));
+        est_params_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
         {
@@ -271,17 +271,17 @@ namespace spatiotemporal_vo
         if (best_loss > loss)
         {
           best_loss = loss;
-          best_params = est_transAxis_;
+          best_params = est_params_;
         }
         prev_loss = loss;
         lr *= decay;
 #ifdef DEBUG
         std::cout << "[DEBUG] Iteration " << iter << ": Loss = " << loss << ", Step Norm = " << step.norm() << std::endl;
-        std::cout << "[DEBUG] Estimated translation velocity: " << est_transAxis_.transpose() << std::endl;
+        std::cout << "[DEBUG] Estimated translation velocity: " << est_params_.transpose() << std::endl;
 #endif
       }
       // 计算最终损失
-      est_transAxis_ = best_params;
+      est_params_ = best_params;
       final_loss_ = best_loss;
     }
   private:

@@ -61,10 +61,10 @@ int main(int argc, char **argv)
 
     // 运行 PEME 估计
     std::vector<double> dummy_depth; // 空深度，使用默认值 1.0
-    RegistrationOutput result = estimator.run(events.xy, events.t, events.polarity, dummy_depth);
+    RegistrationOutput<3> result = estimator.run(events.xy, events.t, events.polarity, dummy_depth);
     if (logger.is_initialized())
     {
-      logger.log(result, LogMode::Rotation);
+      logger.log<3>(result);
     }
 
     t_start += (events.t_end - events.t_start);

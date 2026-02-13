@@ -1,0 +1,27 @@
+experiment_name: indoor_flying1
+seed: 0
+
+paths:
+  data_root: /Datadisk/datasets/MVSEC
+  sequences: indoor_flying1
+  output_root: ./results
+  suffix: trans_indoor_flying1_sn
+
+data:
+  time_window: 0.005
+  event_count: 10000
+  unit_count: 2000
+  adaptive_split: false
+  max_events: 200000000000
+  grid_size: 20
+
+camera:
+  width: 346
+  height: 260
+
+solver:
+    max_iters: 200
+    convergence_thresh: 1e-6
+    regularization: 10 # 200 is for ours
+    lr: 1.0
+    decay: 0.98
