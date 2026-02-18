@@ -25,12 +25,6 @@ namespace spatiotemporal_vo
                            config.paths.event_file;
     all_events_.open(filepath); // Open the file directly with all_events_
 
-    if (!all_events_.is_open())
-    {
-      std::cerr << "Failed to open event file: " << filepath << std::endl;
-      all_events_.close();
-    }
-    std::cout << "Loaded events from " << filepath << std::endl;
     events_buffer_.clear();
     grid_size_ = config.data.grid_size;
     grid_w_ = config.camera.width / grid_size_;
@@ -101,7 +95,7 @@ namespace spatiotemporal_vo
       }
     }
     events_buffer_.set_timespan();
-    return events_buffer_.copy();
+    return events_buffer_;
   }
 
   EventPacket DataLoader::getEventsInWindow(double min_timespan, int event_count, int unit_count, bool adaptive_split, bool use_depth)
@@ -140,7 +134,7 @@ namespace spatiotemporal_vo
       }
       }
       events_buffer_.set_timespan();
-      return events_buffer_.copy();
+      return events_buffer_;
     }
     else
     {
@@ -212,6 +206,7 @@ namespace spatiotemporal_vo
         }
       }
       events_buffer_.set_timespan();
+      packet.set_timespan();
       return packet;
     }
   }

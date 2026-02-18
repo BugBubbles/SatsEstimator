@@ -17,7 +17,7 @@ int main(int argc, char **argv)
   config.print();
 
   // 2. 初始化数据加载器
-  DataLoader data_loader;
+  DataLoader data_loader(config);
   std::string event_file = config.paths.data_root + "/" +
                            config.paths.sequences + "/" +
                            config.paths.event_file;
@@ -48,11 +48,16 @@ int main(int argc, char **argv)
   while (data_loader.hasNext())
   {
     EventPacket events = data_loader.getEventsInWindow(
-        t_start,
-        t_start + config.data.time_window,
-        config.data.event_count);
+        config.data.time_window,
+        config.data.event_count, 
+        config.data.unit_count,
+        config.data.adaptive_split);
 
     data_loader.undistortEvents(events, config.camera);
+
+    data_loader.projectEventsTo3D(events, config.camera);
+
+    data_loader.computeReferenceTime(events, "front");
 
     if (events.empty())
       continue;
@@ -60,8 +65,8 @@ int main(int argc, char **argv)
     std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
 
     // 运行 PEME 估计
-    std::vector<double> dummy_depth; // 空深度，使用默认值 1.0
-    RegistrationOutput<3> result = estimator.run(events.xy, events.t, events.polarity, dummy_depth);
+    RegistrationOutput<3> result = estimator.run(events);
+    result.timespan = {events.t_start, events.t_end};
     if (logger.is_initialized())
     {
       logger.log<3>(result);

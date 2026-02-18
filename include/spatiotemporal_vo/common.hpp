@@ -70,18 +70,6 @@ namespace spatiotemporal_vo
       depth.clear();
       t_start = t_end = 0.0;
     }
-    EventPacket copy() const
-    {
-      EventPacket packet;
-      packet.xy = xy;
-      packet.t = t;
-      packet.polarity = polarity;
-      packet.coord_3d = coord_3d;
-      packet.depth = depth;
-      packet.t_start = t_start;
-      packet.t_end = t_end;
-      return packet;
-    }
     EventPacket operator+=(const EventPacket &other)
     {
       xy.insert(xy.end(), other.xy.begin(), other.xy.end());
@@ -89,7 +77,6 @@ namespace spatiotemporal_vo
       polarity.insert(polarity.end(), other.polarity.begin(), other.polarity.end());
       coord_3d.insert(coord_3d.end(), other.coord_3d.begin(), other.coord_3d.end());
       depth.insert(depth.end(), other.depth.begin(), other.depth.end());
-      t_start = t_start;
       t_end = other.t_end;
       return *this;
     }

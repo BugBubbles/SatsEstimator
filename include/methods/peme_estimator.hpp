@@ -19,16 +19,16 @@ namespace spatiotemporal_vo
     // 配置参数结构体
     struct PEMEParams
     {
-      double ts_start = 0.2;             // 时间表面起始比例
+      double ts_start = 0.8;             // 时间表面起始比例
       double ts_end = 0.8;               // 时间表面结束比例
-      int sample_count = 1000;           // 采样点数量
-      int iter_num = 50;                 // 外层迭代次数
-      int denoise_num = 3;               // 去噪邻域阈值
+      int sample_count = 30000;           // 采样点数量
+      int iter_num = 10;                 // 外层迭代次数
+      int denoise_num = 4;               // 去噪邻域阈值
       int ceres_iter_num = 10;           // Ceres 内部迭代次数
-      int ceres_iter_thread = 4;         // Ceres 线程数
+      int ceres_iter_thread = 8;         // Ceres 线程数
       int gaussian_size = 5;             // 高斯模糊核大小
       float gaussian_sigma = 1.0f;       // 高斯模糊 sigma
-      float default_value_factor = 1.5f; // 默认值因子
+      float default_value_factor = 1.0f; // 默认值因子
     };
 
     /**
@@ -44,21 +44,11 @@ namespace spatiotemporal_vo
 
     /**
      * @brief 运行 PEME 估计
-     * @param xy 事件坐标 (2xN)
-     * @param timestamps 事件时间戳
-     * @param polarity 事件极性
+     * @param events 输入事件数据包
      * @return 估计结果
      */
-    RegistrationOutput<3> run(const std::vector<Vec2> &xy,
-                           const std::vector<double> &timestamps,
-                           const std::vector<int> &polarity,
-                           const std::vector<double> &depth);
-
-    /**
-     * @brief 设置参数
-     */
-    void setParams(const PEMEParams &params) { params_ = params; }
-
+    RegistrationOutput<3> run(const EventPacket& events);
+    
     /**
      * @brief 获取当前估计的角速度
      */
@@ -66,7 +56,7 @@ namespace spatiotemporal_vo
 
   private:
     // 相机内参矩阵
-    Eigen::Matrix3d K_;
+    double fx_, fy_, cx_, cy_;
     int width_, height_, padding_ = 100;
 
     // 参数
@@ -74,7 +64,6 @@ namespace spatiotemporal_vo
 
     // 估计状态
     Vec3 est_angleAxis_; // 当前估计的角速度
-    Vec3 last_est_var_;  // 上一次估计值
     Vec3 best_angleAxis_;
     int count_;
 
@@ -92,7 +81,6 @@ namespace spatiotemporal_vo
     };
 
     EventBundle eventBundle_;
-    EventBundle event_undis_Bundle_;
     EventBundle event_warpped_Bundle_;
 
     /**

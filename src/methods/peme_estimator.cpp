@@ -1,6 +1,5 @@
 #include "spatiotemporal_vo/common.hpp"
 #include "methods/peme_estimator.hpp"
-#include <sophus/so3.hpp>
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -14,33 +13,31 @@ namespace spatiotemporal_vo
   /**
    * @brief Ceres 残差函数
    */
-  struct PEMEResidualCostFunction
+  struct PEMERotation
   {
-    PEMEResidualCostFunction(
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    PEMERotation(
         const Vec3 &point,
         const int padding,
         double delta_time_early,
         double delta_time_later,
-        const Eigen::Matrix3d &K,
-        ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_early_ptr,
-        ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_later_ptr,
-        const Vec3 &last_est_var)
+        double fx, double fy, double cx, double cy,
+        ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_early_ptr,
+        ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_later_ptr)
         : point_(point),
           padding_(padding),
           delta_time_early_(delta_time_early),
           delta_time_later_(delta_time_later),
-          intrinsic_(K),
+          fx_(fx), fy_(fy), cx_(cx), cy_(cy),
           interpolator_early_ptr_(interpolator_early_ptr),
-          interpolator_later_ptr_(interpolator_later_ptr),
-          last_est_var_(last_est_var)
+          interpolator_later_ptr_(interpolator_later_ptr)
     {
     }
 
     template <typename T>
     bool operator()(const T *const ag, T *residual) const
     {
-      Eigen::Matrix<T, 3, 1> delta_points_T, delta_second_points_T;
-      Eigen::Matrix<T, 3, 1> points_early_T, points_later_T;
+      Eigen::Matrix<T, 3, 1> delta_points_T, points_early_T, points_later_T;
       Eigen::Matrix<T, 2, 1> points_2D_early_T, points_2D_later_T;
 
       // Taylor 二阶展开: points * skew_matrix * skew_matrix
@@ -48,29 +45,25 @@ namespace spatiotemporal_vo
       delta_points_T(1) = ag[2] * T(point_(0)) - ag[0] * T(point_(2));
       delta_points_T(2) = -ag[1] * T(point_(0)) + ag[0] * T(point_(1));
 
-      delta_second_points_T(0) = -ag[2] * delta_points_T(1) + ag[1] * delta_points_T(2);
-      delta_second_points_T(1) = ag[2] * delta_points_T(0) - ag[0] * delta_points_T(2);
-      delta_second_points_T(2) = -ag[1] * delta_points_T(0) + ag[0] * delta_points_T(1);
-
       // 计算 warp 后的 3D 点
       T dt_early = T(delta_time_early_);
       T dt_early_sq = T(0.5 * delta_time_early_ * delta_time_early_);
-      points_early_T(0) = T(point_(0)) + delta_points_T(0) * dt_early + delta_second_points_T(0) * dt_early_sq;
-      points_early_T(1) = T(point_(1)) + delta_points_T(1) * dt_early + delta_second_points_T(1) * dt_early_sq;
-      points_early_T(2) = T(point_(2)) + delta_points_T(2) * dt_early + delta_second_points_T(2) * dt_early_sq;
+      points_early_T(0) = T(point_(0)) + delta_points_T(0) * dt_early;
+      points_early_T(1) = T(point_(1)) + delta_points_T(1) * dt_early;
+      points_early_T(2) = T(point_(2)) + delta_points_T(2) * dt_early;
 
       T dt_later = T(delta_time_later_);
       T dt_later_sq = T(0.5 * delta_time_later_ * delta_time_later_);
-      points_later_T(0) = T(point_(0)) + delta_points_T(0) * dt_later + delta_second_points_T(0) * dt_later_sq;
-      points_later_T(1) = T(point_(1)) + delta_points_T(1) * dt_later + delta_second_points_T(1) * dt_later_sq;
-      points_later_T(2) = T(point_(2)) + delta_points_T(2) * dt_later + delta_second_points_T(2) * dt_later_sq;
+      points_later_T(0) = T(point_(0)) + delta_points_T(0) * dt_later;
+      points_later_T(1) = T(point_(1)) + delta_points_T(1) * dt_later;
+      points_later_T(2) = T(point_(2)) + delta_points_T(2) * dt_later;
 
       // 投影到 2D
-      points_2D_early_T(0) = points_early_T(0) / points_early_T(2) * T(intrinsic_(0, 0)) + T(intrinsic_(0, 2));
-      points_2D_early_T(1) = points_early_T(1) / points_early_T(2) * T(intrinsic_(1, 1)) + T(intrinsic_(1, 2));
+      points_2D_early_T(0) = points_early_T(0) / points_early_T(2) * T(fx_) + T(cx_);
+      points_2D_early_T(1) = points_early_T(1) / points_early_T(2) * T(fy_) + T(cy_);
 
-      points_2D_later_T(0) = points_later_T(0) / points_later_T(2) * T(intrinsic_(0, 0)) + T(intrinsic_(0, 2));
-      points_2D_later_T(1) = points_later_T(1) / points_later_T(2) * T(intrinsic_(1, 1)) + T(intrinsic_(1, 2));
+      points_2D_later_T(0) = points_later_T(0) / points_later_T(2) * T(fx_) + T(cx_);
+      points_2D_later_T(1) = points_later_T(1) / points_later_T(2) * T(fy_) + T(cy_);
 
       // 插值获取残差
       T early_loss = T(0), later_loss = T(0);
@@ -84,36 +77,80 @@ namespace spatiotemporal_vo
 
     Vec3 point_;
     int padding_;
-    double delta_time_early_, delta_time_later_;
-    Eigen::Matrix3d intrinsic_;
-    ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_early_ptr_;
-    ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>> *interpolator_later_ptr_;
-    Vec3 last_est_var_;
+    double delta_time_early_, delta_time_later_, fx_, fy_, cx_, cy_;
+    ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_early_ptr_;
+    ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_later_ptr_;
+  };
+  struct PEMETranslation
+  {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    PEMETranslation(
+        const Vec3 &point,
+        const int padding,
+        double delta_time_early,
+        double delta_time_later,
+        double fx, double fy, double cx, double cy,
+        ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_early_ptr,
+        ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_later_ptr)
+        : point_(point),
+          padding_(padding),
+          delta_time_early_(delta_time_early),
+          delta_time_later_(delta_time_later),
+          fx_(fx), fy_(fy), cx_(cx), cy_(cy),
+          interpolator_early_ptr_(interpolator_early_ptr),
+          interpolator_later_ptr_(interpolator_later_ptr)
+    {
+    }
+
+    template <typename T>
+    bool operator()(const T *const ag, T *residual) const
+    {
+      Eigen::Matrix<T, 3, 1> delta_points_T;
+      Eigen::Matrix<T, 3, 1> points_early_T, points_later_T;
+      Eigen::Matrix<T, 2, 1> points_2D_early_T, points_2D_later_T;
+
+      // Taylor 二阶展开: points * skew_matrix * skew_matrix
+      delta_points_T(0) = ag[0];
+      delta_points_T(1) = ag[1];
+      delta_points_T(2) = ag[2];
+
+      // 计算 warp 后的 3D 点
+      T dt_early = T(delta_time_early_);
+      points_early_T = T(point_) + delta_points_T * dt_early;
+
+      T dt_later = T(delta_time_later_);
+      points_later_T = T(point_) + delta_points_T * dt_later;
+
+      // 投影到 2D
+      points_2D_early_T(0) = points_early_T(0) / points_early_T(2) * T(fx_) + T(cx_);
+      points_2D_early_T(1) = points_early_T(1) / points_early_T(2) * T(fy_) + T(cy_);
+
+      points_2D_later_T(0) = points_later_T(0) / points_later_T(2) * T(fx_) + T(cx_);
+      points_2D_later_T(1) = points_later_T(1) / points_later_T(2) * T(fy_) + T(cy_);
+
+      // 插值获取残差
+      T early_loss = T(0), later_loss = T(0);
+      interpolator_early_ptr_->Evaluate(points_2D_early_T(1) + T(padding_), points_2D_early_T(0) + T(padding_), &early_loss);
+      interpolator_later_ptr_->Evaluate(points_2D_later_T(1) + T(padding_), points_2D_later_T(0) + T(padding_), &later_loss);
+
+      residual[0] = early_loss + later_loss;
+
+      return true;
+    }
+
+    Vec3 point_;
+    int padding_;
+    double delta_time_early_, delta_time_later_, fx_, fy_, cx_, cy_;
+    ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_early_ptr_;
+    ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_later_ptr_;
   };
 
   PEMEEstimator::PEMEEstimator(double fx, double fy, double cx, double cy,
                                int width, int height, const Config &config)
-      : width_(width), height_(height), count_(1)
+      : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
   {
-    // 初始化相机内参矩阵
-    K_ << fx, 0, cx,
-        0, fy, cy,
-        0, 0, 1;
-
     // 初始化估计状态
     est_angleAxis_.setZero();
-    last_est_var_.setZero();
-
-    // 从配置中加载参数
-    params_.ts_start = 0.8;
-    params_.ts_end = 0.8;
-    params_.sample_count = 1000;
-    params_.iter_num = 10;
-    params_.ceres_iter_num = 10;
-    params_.ceres_iter_thread = 8;
-    params_.gaussian_size = 5;
-    params_.gaussian_sigma = 1.0f;
-    params_.default_value_factor = 1.0f;
   }
 
   void PEMEEstimator::projectEventsTo3D(const std::vector<Vec2> &xy,
@@ -123,73 +160,43 @@ namespace spatiotemporal_vo
     int n = xy.size();
     coord_3d.resize(n);
 
-    double fx = K_(0, 0), fy = K_(1, 1);
-    double cx = K_(0, 2), cy = K_(1, 2);
-
     for (int i = 0; i < n; ++i)
     {
-      double x = (xy[i](0) - cx) / fx;
-      double y = (xy[i](1) - cy) / fy;
-      coord_3d[i] = Vec3(x, y, depth.empty() ? 1.0 : depth[i]);
+      double d = depth.empty() ? 1.0 : depth[i];
+      double x = (xy[i](0) - cx_) / fx_ * d;
+      double y = (xy[i](1) - cy_) / fy_ * d;
+      coord_3d[i] = Vec3(x, y, d);
     }
   }
 
   void PEMEEstimator::getSampledIndices(const cv::Mat &iwe, std::vector<int> &indices, int count,
                                         double start_ratio, double end_ratio)
   {
-    int start_idx = static_cast<int>(eventBundle_.size * start_ratio);
-    int end_idx = static_cast<int>(eventBundle_.size * end_ratio);
-    int range = end_idx - start_idx;
-
-    if (range <= 0 || count <= 0)
+    cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
+    for (int i = 0; i < count;)
     {
-      indices.clear();
-      return;
+      int sample_idx = rng.uniform(int(eventBundle_.size * start_ratio), int(eventBundle_.size * end_ratio));
+
+      // check valid 8 neighbor hood existed
+      int sampled_x = eventBundle_.coord[sample_idx].x() + padding_;
+      int sampled_y = eventBundle_.coord[sample_idx].y() + padding_;
+      if (sampled_x > 0 && sampled_x < width_ + 2 * padding_ - 1 &&
+          sampled_y > 0 && sampled_y < height_ + 2 * padding_ - 1)
+      {
+      int count = 0;
+      for (int j = -1; j < 2; j++)
+        for (int k = -1; k < 2; k++)
+        {
+          count += int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
+        }
+
+      if (count > params_.denoise_num)
+      {
+        indices.push_back(sample_idx);
+        i++;
+      }
     }
-
-    count = std::min(count, range);
-    indices.resize(count);
-
-    // 随机采样
-    std::vector<int> all_indices(range);
-    std::iota(all_indices.begin(), all_indices.end(), start_idx);
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::shuffle(all_indices.begin(), all_indices.end(), gen);
-
-    std::copy(all_indices.begin(), all_indices.begin() + count, indices.begin());
-    std::sort(indices.begin(), indices.end());
-    // cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
-    // // get samples, filtered out noise
-    // for (int i = 0; i < samples_count;)
-    // {
-    //   int sample_idx = rng.uniform(int(event_warpped_Bundle_.size * sample_start), int(event_warpped_Bundle_.size * sample_end));
-
-    //   // check valid 8 neighbor hood existed
-    //   int sampled_x = event_warpped_Bundle_.coord[sample_idx].x();
-    //   int sampled_y = event_warpped_Bundle_.coord[sample_idx].y();
-    //   if (sampled_x >= width_ - 1 || sampled_x < 1 || sampled_y >= height_ - 1 || sampled_y < 1)
-    //   {
-    //     // cout << "x, y" << sampled_x << "," << sampled_y << endl;
-    //     continue;
-    //   }
-
-    //   int count = iwe.at<int>(sampled_y, sampled_x);
-    //   // int count = 0;
-    //   // for (int j = -1; j < 2; j++)
-    //   //   for (int k = -1; k < 2; k++)
-    //   //   {
-    //   //     count += iwe.at<cv::Vec3f>(sampled_y + j, sampled_x + k)[0] > 0
-    //   //   }
-
-    //   // valid denoised
-    //   if (count > params_.denoise_num) // TODO
-    //   {
-    //     vec_sampled_idx.push_back(sample_idx);
-    //     i++;
-    //   }
-    // }
+    }
   }
   cv::Mat PEMEEstimator::getWarpedEventImage(const Vec3 &angularVelocity,
                                              EventBundle &warped_bundle,
@@ -198,9 +205,8 @@ namespace spatiotemporal_vo
     warped_bundle.coord.clear();
     warped_bundle.coord_3d.clear();
     warped_bundle.isInner.clear();
-    warped_bundle.size = 0;
     // 创建三通道16位无符号整型图像
-    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_32FC3);
+    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16U);
     int n = eventBundle_.size;
 
     warped_bundle.coord.resize(n);
@@ -209,41 +215,35 @@ namespace spatiotemporal_vo
     warped_bundle.size = n;
 
     double ref_time = use_later_time ? eventBundle_.time_delta.back() : 0.0;
-
+    Vec3 point_first, p3d, rotation_vec;
     for (int i = 0; i < n; ++i)
     {
       double dt = eventBundle_.time_delta[i] - ref_time;
-      Vec3 rotation_vec = angularVelocity * dt;
-      Sophus::SO3d R = Sophus::SO3d::exp(rotation_vec);
-
-      Vec3 p3d = R.matrix() * event_undis_Bundle_.coord_3d[i];
-      warped_bundle.coord_3d[i] = p3d;
-
+      rotation_vec = angularVelocity * dt;
+      p3d = eventBundle_.coord_3d[i];
+      point_first(0) = -rotation_vec(2) * p3d(1) + rotation_vec(1) * p3d(2);
+      point_first(1) = rotation_vec(2) * p3d(0) - rotation_vec(0) * p3d(2);
+      point_first(2) = -rotation_vec(1) * p3d(0) + rotation_vec(0) * p3d(1);
+      
+      p3d += point_first;
+        
       // 投影到 2D
-      double x = p3d(0) / p3d(2) * K_(0, 0) + K_(0, 2);
-      double y = p3d(1) / p3d(2) * K_(1, 1) + K_(1, 2);
+      double x = p3d(0) / p3d(2) * fx_ + cx_;
+      double y = p3d(1) / p3d(2) * fy_ + cy_;
 
       warped_bundle.coord[i] = Vec2(x, y);
+      warped_bundle.coord_3d[i] = p3d;
 
       // 检查是否在图像内
-      int xi = static_cast<int>(std::floor(x));
-      int yi = static_cast<int>(std::floor(y));
-
-      if (xi >= -padding_ && xi < width_ + padding_ - 1 &&
-          yi >= -padding_ && yi < height_ + padding_ - 1)
+      if (x >= -padding_ && x <= width_ + padding_ - 1 &&
+          y >= -padding_ && y <= height_ + padding_ - 1)
       {
         warped_bundle.isInner[i] = true;
-        // 获取指向该像素的三通道指针
-        float *pixel = image.ptr<float>(yi + padding_, xi + padding_);
-        if (eventBundle_.polarity[i] > 0)
-        {
-          pixel[0] += 1.0; // 正事件加到第一个通道
-        }
-        else
-        {
-          pixel[2] += 1.0; // 负事件加到第三个通道
-        }
-        // pixel[1] 保持不变
+        image.at<unsigned short>(y + padding_, x + padding_) += 1;
+      }
+      else
+      {
+        warped_bundle.isInner[i] = false;
       }
     }
 
@@ -256,9 +256,7 @@ namespace spatiotemporal_vo
     double best_loss = std::numeric_limits<double>::max();
     best_angleAxis_ = est_angleAxis_;
     // 获取 warp 后的事件图像
-    cv::Mat iwe = getWarpedEventImage(est_angleAxis_, event_warpped_Bundle_);
-    // 对 iwe 也进行卷积，将3x3领域内的值进行加和
-    // cv::boxFilter(iwe, iwe, iwe.depth(), cv::Size(3, 3), cv::Point(-1, -1), false);
+    cv::Mat iwe = getWarpedEventImage(Vec3(0, 0, 0), event_warpped_Bundle_);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec3 eg_angleAxis(angleAxis[0], angleAxis[1], angleAxis[2]);
@@ -268,13 +266,13 @@ namespace spatiotemporal_vo
                                  iter / static_cast<double>(params_.iter_num) * (params_.ts_end - params_.ts_start);
 
       // 初始化时间表面
-      cv::Mat cv_earlier_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_32F);
-      cv::Mat cv_later_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_32F);
+      cv::Mat cv_earlier_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
+      cv::Mat cv_later_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
 
-      float early_default_value = eventBundle_.time_delta[static_cast<int>(eventBundle_.size * timesurface_range)];
+      double early_default_value = eventBundle_.time_delta[static_cast<int>(eventBundle_.size * timesurface_range)];
       cv_earlier_timesurface.setTo(early_default_value * params_.default_value_factor);
 
-      float later_default_value = eventBundle_.time_delta.back() -
+      double later_default_value = eventBundle_.time_delta.back() -
                                   eventBundle_.time_delta[static_cast<int>(eventBundle_.size * (1 - timesurface_range))];
       cv_later_timesurface.setTo(later_default_value * params_.default_value_factor);
 
@@ -282,46 +280,43 @@ namespace spatiotemporal_vo
       getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_);
 
       // 构建 earlier 时间表面
-      for (int i = static_cast<int>(event_warpped_Bundle_.size * timesurface_range); i >= 0; --i)
+      for (int i = event_warpped_Bundle_.size * timesurface_range; i >= 0; --i)
       {
-        int sampled_x = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](0)));
-        int sampled_y = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](1)));
+        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
 
         if (!event_warpped_Bundle_.isInner[i])
           continue;
 
-        cv_earlier_timesurface.at<float>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta[i];
+        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta[i];
       }
 
       // 获取 later 时间表面
       getWarpedEventImage(eg_angleAxis, event_warpped_Bundle_, true);
 
-      for (int i = static_cast<int>(event_warpped_Bundle_.size * (1 - timesurface_range));
-           i < event_warpped_Bundle_.size; ++i)
+      for (int i = event_warpped_Bundle_.size * (1 - timesurface_range);i < event_warpped_Bundle_.size; ++i)
       {
-        int sampled_x = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](0)));
-        int sampled_y = static_cast<int>(std::floor(event_warpped_Bundle_.coord[i](1)));
+        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
 
         if (!event_warpped_Bundle_.isInner[i])
           continue;
 
-        cv_later_timesurface.at<float>(sampled_y + padding_, sampled_x + padding_) =
-            eventBundle_.time_delta.back() - eventBundle_.time_delta[i];
+        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta.back() - eventBundle_.time_delta[i];
       }
 
       // 高斯模糊
-      cv::Mat cv_earlier_timesurface_blur, cv_later_timesurface_blur;
-      cv::GaussianBlur(cv_earlier_timesurface, cv_earlier_timesurface_blur,
+      cv::GaussianBlur(cv_earlier_timesurface, cv_earlier_timesurface,
                        cv::Size(params_.gaussian_size, params_.gaussian_size),
                        params_.gaussian_sigma);
-      cv::GaussianBlur(cv_later_timesurface, cv_later_timesurface_blur,
+      cv::GaussianBlur(cv_later_timesurface, cv_later_timesurface,
                        cv::Size(params_.gaussian_size, params_.gaussian_size),
                        params_.gaussian_sigma);
 
-      ceres::Grid2D<float, 1> grid_early(cv_earlier_timesurface.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
-      ceres::Grid2D<float, 1> grid_later(cv_later_timesurface.ptr<float>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
-      auto interpolator_early_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_early);
-      auto interpolator_later_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<float, 1>>>(grid_later);
+      ceres::Grid2D<double, 1> grid_early(cv_earlier_timesurface.ptr<double>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      ceres::Grid2D<double, 1> grid_later(cv_later_timesurface.ptr<double>(), 0, height_ + 2 * padding_, 0, width_ + 2 * padding_);
+      auto interpolator_early_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>>>(grid_early);
+      auto interpolator_later_ptr = std::make_unique<ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>>>(grid_later);
 
       // 采样
       std::vector<int> vec_sampled_idx;
@@ -330,29 +325,29 @@ namespace spatiotemporal_vo
 
       // 构建 Ceres 问题
       ceres::Problem problem;
-
+      // 将vec_sampled_idx打印至文件流中
       for (int sample_idx : vec_sampled_idx)
       {
         double early_time = eventBundle_.time_delta[sample_idx];
         double later_time = eventBundle_.time_delta[sample_idx] - eventBundle_.time_delta.back();
 
-        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMEResidualCostFunction, 1, 3>(
-            new spatiotemporal_vo::PEMEResidualCostFunction(event_undis_Bundle_.coord_3d[sample_idx],
+        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMERotation, 1, 3>(
+            new spatiotemporal_vo::PEMERotation(eventBundle_.coord_3d[sample_idx],
                                                             padding_,
                                                             early_time, later_time,
-                                                            K_,
+                                                            fx_, fy_, cx_, cy_,
                                                             interpolator_early_ptr.get(),
-                                                            interpolator_later_ptr.get(),
-                                                            last_est_var_));
+                                                            interpolator_later_ptr.get()));
 
-        problem.AddResidualBlock(cost_function, nullptr, angleAxis);
+        problem.AddResidualBlock(cost_function, nullptr, &angleAxis[0]);
       }
 
       // Ceres 求解器配置
       ceres::Solver::Options options;
       options.minimizer_progress_to_stdout = false;
+      options.logging_type = ceres::SILENT;
       options.num_threads = params_.ceres_iter_thread;
-      options.linear_solver_type = ceres::SPARSE_SCHUR;
+      options.linear_solver_type = ceres::DENSE_QR;
       options.max_num_iterations = params_.ceres_iter_num;
 
       ceres::Solver::Summary summary;
@@ -360,20 +355,22 @@ namespace spatiotemporal_vo
       // 第一次迭代时评估初始值
       if (iter == 1)
       {
-        double cost_old = 0, cost_zero = 0;
-        std::vector<double> residual_vec;
+        double cost;
+        std::vector<double> residual_vec_old, residual_vec_zero;
 
         // 测试旧速度
         angleAxis[0] = est_angleAxis_(0);
         angleAxis[1] = est_angleAxis_(1);
         angleAxis[2] = est_angleAxis_(2);
-        problem.Evaluate(ceres::Problem::EvaluateOptions(), &cost_old, &residual_vec, nullptr, nullptr);
+        problem.Evaluate(ceres::Problem::EvaluateOptions(), &cost, &residual_vec_old, nullptr, nullptr);
+        double residual_sum_old = std::accumulate(residual_vec_old.begin(), residual_vec_old.end(), 0.0);
 
         // 测试零速度
         angleAxis[0] = angleAxis[1] = angleAxis[2] = 0;
-        problem.Evaluate(ceres::Problem::EvaluateOptions(), &cost_zero, &residual_vec, nullptr, nullptr);
+        problem.Evaluate(ceres::Problem::EvaluateOptions(), &cost, &residual_vec_zero, nullptr, nullptr);
+        double residual_sum_zero = std::accumulate(residual_vec_zero.begin(), residual_vec_zero.end(), 0.0);
 
-        if (cost_old < cost_zero)
+        if (residual_sum_old < residual_sum_zero)
         {
           angleAxis[0] = est_angleAxis_(0);
           angleAxis[1] = est_angleAxis_(1);
@@ -383,37 +380,19 @@ namespace spatiotemporal_vo
 
       // 求解
       ceres::Solve(options, &problem, &summary);
-
-      // 计算当前损失
-      double current_loss = 0.0;
       std::vector<double> residual_vec;
-      problem.Evaluate(ceres::Problem::EvaluateOptions(), &current_loss, &residual_vec, nullptr, nullptr);
-
-      if (current_loss < best_loss)
-      {
-        best_loss = current_loss;
-        best_angleAxis_ = Vec3(angleAxis[0], angleAxis[1], angleAxis[2]);
-      }
-
-      // 可选：输出每次迭代损失
-      std::cout << "[PEME] Iter " << iter << " loss: " << current_loss << std::endl;
+      problem.Evaluate(ceres::Problem::EvaluateOptions(), &best_loss, &residual_vec, nullptr, nullptr);
     }
-
     // 更新估计值
     est_angleAxis_ = Vec3(angleAxis[0], angleAxis[1], angleAxis[2]);
-    last_est_var_ = est_angleAxis_;
     return best_loss;
   }
 
-  RegistrationOutput<3> PEMEEstimator::run(const std::vector<Vec2> &xy,
-                                        const std::vector<double> &timestamps,
-                                        const std::vector<int> &polarity,
-                                        const std::vector<double> &depth)
+  RegistrationOutput<3> PEMEEstimator::run(const EventPacket& events)
   {
     RegistrationOutput<3> result;
-    result.timespan = {timestamps.front(), timestamps.back()};
 
-    if (xy.empty())
+    if (events.empty())
     {
       result.params.setZero();
       result.stats.loss = 0;
@@ -422,37 +401,30 @@ namespace spatiotemporal_vo
     }
 
     // 初始化事件数据
-    eventBundle_.size = xy.size();
-    eventBundle_.coord = xy;
-    eventBundle_.polarity = polarity;
-    eventBundle_.first_tstamp = timestamps.front();
-    eventBundle_.last_tstamp = timestamps.back();
-
-    // 计算相对时间
-    eventBundle_.time_delta.resize(eventBundle_.size);
-    for (int i = 0; i < eventBundle_.size; ++i)
-    {
-      eventBundle_.time_delta[i] = timestamps[i] - timestamps.front();
-    }
-
-    // 投影到 3D
-    event_undis_Bundle_.size = eventBundle_.size;
-    projectEventsTo3D(xy, event_undis_Bundle_.coord_3d, depth);
+    eventBundle_.coord = events.xy;
+    eventBundle_.polarity = events.polarity;
+    eventBundle_.coord_3d = events.coord_3d;
+    eventBundle_.time_delta = events.t;
+    eventBundle_.size = events.size();
+    eventBundle_.first_tstamp = events.t.front();
+    eventBundle_.last_tstamp = events.t.back();
 
     std::cout << '[' << count_ << "] " << "PEME: Processing "
               << eventBundle_.size << " events, duration: "
               << (eventBundle_.last_tstamp - eventBundle_.first_tstamp) << "s" << std::endl;
 
     // 运行优化
+    result.stats.time_taken = omp_get_wtime();
     result.stats.loss = optimizeMotion();
 
     // 填充结果
     result.params = est_angleAxis_;
     result.stats.num_iterations = count_;
+    result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
 
     std::cout << '[' << count_ << "] " << "PEME: Estimated angular velocity: "
               << est_angleAxis_.transpose()
-              << ", best loss: " << result.stats.loss << std::endl;
+              << ", best loss: " << result.stats.loss << ", Optimization took " << result.stats.time_taken << " seconds." << std::endl;
     count_++;
     return result;
   }
