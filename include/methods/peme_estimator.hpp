@@ -15,6 +15,7 @@ namespace spatiotemporal_vo
    */
   class PEMEEstimator
   {
+    using Vec6 = Eigen::Matrix<double, 6, 1>;
   public:
     // 配置参数结构体
     struct PEMEParams
@@ -47,13 +48,12 @@ namespace spatiotemporal_vo
      * @param events 输入事件数据包
      * @return 估计结果
      */
-    RegistrationOutput<3> run(const EventPacket& events);
-    
-    /**
-     * @brief 获取当前估计的角速度
-     */
-    Vec3 getEstimatedAngularVelocity() const { return est_angleAxis_; }
+    RegistrationOutput<3> runRotation(const EventPacket& events);
 
+    RegistrationOutput<6> runSixDof(const EventPacket& events);
+
+    RegistrationOutput<3> runTranslation(const EventPacket& events);
+    
   private:
     // 相机内参矩阵
     double fx_, fy_, cx_, cy_;
@@ -63,8 +63,8 @@ namespace spatiotemporal_vo
     PEMEParams params_;
 
     // 估计状态
-    Vec3 est_angleAxis_; // 当前估计的角速度
-    Vec3 best_angleAxis_;
+    Vec3 est_vec3_;
+    Vec6 est_vec6_;
     int count_;
 
     // 事件数据缓存
@@ -84,13 +84,6 @@ namespace spatiotemporal_vo
     EventBundle event_warpped_Bundle_;
 
     /**
-     * @brief 将事件投影到归一化平面
-     */
-    void projectEventsTo3D(const std::vector<Vec2> &xy,
-                           std::vector<Vec3> &coord_3d,
-                           const std::vector<double> &depth);
-
-    /**
      * @brief 获取采样索引
      */
     void getSampledIndices(const cv::Mat &iwe,
@@ -100,7 +93,15 @@ namespace spatiotemporal_vo
     /**
      * @brief 获取 warp 后的事件图像
      */
-    cv::Mat getWarpedEventImage(const Vec3 &angularVelocity,
+    cv::Mat getWarpedEventImageRotation(const Vec3 &angularVelocity,
+                                EventBundle &warped_bundle,
+                                bool use_later_time = false);
+    
+    cv::Mat getWarpedEventImageTranslation(const Vec3 &translation,
+                                EventBundle &warped_bundle,
+                                bool use_later_time = false);
+
+    cv::Mat getWarpedEventImageSixDof(const Vec6 &trans_rot_vec,
                                 EventBundle &warped_bundle,
                                 bool use_later_time = false);
 
@@ -108,6 +109,10 @@ namespace spatiotemporal_vo
      * @brief 核心优化函数
      * @return 损失函数值
      */
-    double optimizeMotion();
+    double optimizeRotation();
+
+    double optimizeTranslation();
+
+    double optimizeSixDof();
   };
 } // namespace spatiotemporal_vo

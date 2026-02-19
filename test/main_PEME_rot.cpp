@@ -65,7 +65,7 @@ int main(int argc, char **argv)
     std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
 
     // 运行 PEME 估计
-    RegistrationOutput<3> result = estimator.run(events);
+    RegistrationOutput<3> result = estimator.runRotation(events);
     result.timespan = {events.t_start, events.t_end};
     if (logger.is_initialized())
     {
