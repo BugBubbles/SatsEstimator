@@ -5,6 +5,7 @@
 #include <vector>
 #include <utility>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 namespace spatiotemporal_vo
 {

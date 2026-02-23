@@ -274,9 +274,10 @@ namespace spatiotemporal_vo
 
     for (int i = 0; i < n; ++i)
     {
-      double x = (packet.xy[i](0) - cx) / fx * (depth_provided ? packet.depth[i] : 1.0);
-      double y = (packet.xy[i](1) - cy) / fy * (depth_provided ? packet.depth[i] : 1.0);
-      packet.coord_3d[i] = Vec3(x, y, depth_provided ? packet.depth[i] : 1.0);
+      double depth = depth_provided ? packet.depth[i] : 1.0; // 如果没有深度信息，假设深度为1.0
+      double x = (packet.xy[i](0) - cx) / fx * depth;
+      double y = (packet.xy[i](1) - cy) / fy * depth;
+      packet.coord_3d[i] = Vec3(x, y, depth);
     }
   }
 
