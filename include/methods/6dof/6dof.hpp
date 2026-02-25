@@ -194,11 +194,11 @@ namespace spatiotemporal_vo
       double loss = 0.0, lambda = 1.5, prev_loss = best_loss;
       Vec6 step, best_params = est_params_;
 
-      //Adam优化器参数
-      Vec6 m = Vec6::Zero(), v = Vec6::Zero();
-      const double beta1 = 0.9, inv_beta1 = 1-beta1;
-      const double beta2= 0.999, inv_beta2 =1-beta2, epsilon = 1e-8;
-      double beta1_T = beta1, beta2_T = beta2;
+      // // Adam优化器参数
+      // Vec6 m = Vec6::Zero(), v = Vec6::Zero();
+      // const double beta1 = 0.9, inv_beta1 = 1-beta1;
+      // const double beta2= 0.999, inv_beta2 =1-beta2, epsilon = 1e-8;
+      // double beta1_T = beta1, beta2_T = beta2;
       for (int iter = 0; iter < max_iterations; ++iter)
       {
         compute_gradient(est_params_, loss, gradient, hessian);

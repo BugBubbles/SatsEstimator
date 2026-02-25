@@ -1,0 +1,26 @@
+experiment_name: dynamic_rotation
+seed: 0
+
+paths:
+  data_root: /Datadisk/datasets/Davis_240C
+  sequences: dynamic_rotation
+  output_root: ./results
+  suffix: dynamic_nort_sn_tn
+
+data:
+  time_window: 0.005
+  event_count: 30000
+  unit_count: 2000
+  adaptive_split: false
+  max_events: 200000000000
+  grid_size: 20
+
+camera:
+  width: 240
+  height: 180
+
+solver:
+    max_iters: 200
+    epsilon_T: 0.02
+    trim_ratio: 1.0
+    lr: 1.0
