@@ -1,17 +1,17 @@
-experiment_name: pemep_vo
+experiment_name: poster_rotation
 seed: 0
 
 paths:
   data_root: /Datadisk/datasets/Davis_240C
   sequences: poster_rotation
   output_root: ./results
-  suffix: poster_sn
+  suffix: rot_poster_tn_sy
 
 data:
   time_window: 0.005
   event_count: 30000
   unit_count: 2000
-  adaptive_split: false
+  adaptive_split: true
   max_events: 200000000000
   grid_size: 20
   

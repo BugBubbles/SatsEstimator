@@ -1,0 +1,26 @@
+experiment_name: outdoor_day1
+seed: 0
+
+paths:
+  data_root: /Datadisk/datasets/MVSEC
+  sequences: outdoor_day1
+  output_root: ./results
+  suffix: outdoor_day1_sn_tn
+
+data:
+  time_window: -1
+  event_count: 30000
+  unit_count: 2000
+  adaptive_split: false
+  max_events: 200000000000
+  grid_size: 20
+
+camera:
+  width: 346
+  height: 260
+
+solver:
+    max_iters: 200
+    epsilon_T: 0.02
+    trim_ratio: 1.0
+    lr: 1.0

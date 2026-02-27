@@ -5,7 +5,7 @@ paths:
   data_root: /Datadisk/datasets/Davis_240C
   sequences: shapes_rotation
   output_root: ./results
-  suffix: shapes_ts_sn
+  suffix: rot_shapes_tn_sy
 
 data:
   time_window: 0.005

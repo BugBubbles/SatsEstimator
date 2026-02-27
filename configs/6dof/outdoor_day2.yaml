@@ -1,0 +1,27 @@
+experiment_name: outdoor_day2
+seed: 0
+
+paths:
+  data_root: /Datadisk/datasets/MVSEC
+  sequences: outdoor_day2
+  output_root: ./results
+  suffix: 6dof_outdoor_day2_sn0.05_tn
+
+data:
+  time_window: 0.05
+  event_count: 30000
+  unit_count: 2000
+  adaptive_split: true
+  max_events: 200000000000
+  grid_size: 20
+
+camera:
+  width: 346
+  height: 260
+
+solver:
+    max_iters: 40
+    convergence_thresh: 1e-6
+    regularization: 0 # 10 is for trans only
+    lr: 0.05
+    decay: 0.98

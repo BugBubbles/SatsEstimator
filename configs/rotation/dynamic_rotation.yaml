@@ -5,13 +5,13 @@ paths:
   data_root: /Datadisk/datasets/Davis_240C
   sequences: dynamic_rotation
   output_root: ./results
-  suffix: dynamic_tm_sy
+  suffix: dynamic_nort_tn_sn
 
 data:
   time_window: 0.005
   event_count: 30000
   unit_count: 2000
-  adaptive_split: true
+  adaptive_split: false
   max_events: 200000000000
   grid_size: 20
 

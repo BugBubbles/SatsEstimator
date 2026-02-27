@@ -5,7 +5,7 @@ paths:
   data_root: /Datadisk/datasets/MVSEC
   sequences: indoor_flying2
   output_root: ./results
-  suffix: indoor_flying2_sn
+  suffix: indoor_flying2_sn_tn
 
 data:
   time_window: -1

@@ -1,0 +1,27 @@
+experiment_name: outdoor_day1
+seed: 0
+
+paths:
+  data_root: /Datadisk/datasets/MVSEC
+  sequences: outdoor_day1
+  output_root: ./results
+  suffix: 6dof_outdoor_day1_sn30k_tn_reg1e-4
+
+data:
+  time_window: 0.05
+  event_count: 30000
+  unit_count: 2000
+  adaptive_split: false
+  max_events: 200000000000
+  grid_size: 20
+
+camera:
+  width: 346
+  height: 260
+
+solver:
+    max_iters: 200
+    convergence_thresh: 1e-6
+    regularization: 1e-4 # 10 is for trans only
+    lr: 1
+    decay: 0.98

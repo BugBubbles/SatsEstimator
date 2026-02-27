@@ -242,7 +242,7 @@ namespace spatiotemporal_vo
         // v = beta2 * v + inv_beta2 * gradient.array().square().matrix();
         // beta1_T *= beta1;
         // beta2_T *= beta2;
-        // step = -lr * m.array() / (v.array().sqrt() + epsilon) * (std::sqrt(1 - beta2_T) / (1 - beta1_T));
+        // step = lr * m.array() / (v.array().sqrt() + epsilon) * (std::sqrt(1 - beta2_T) / (1 - beta1_T));
         est_params_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
