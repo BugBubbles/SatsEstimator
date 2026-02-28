@@ -12,7 +12,11 @@ if(DEBUG)
 endif()
 # --- 是否构建测试 ---
 option(BUILD_TESTS "Build [cmax,stppp,poly] test cases" ON)
-
+# --- 是否将极性分开处理 ---
+option(SEPARATE_POLARITY "Process positive and negative events separately" OFF)
+if(SEPARATE_POLARITY)
+    add_definitions(-DSEPARATE_POLARITY)
+endif()
 # --- 是否采用解析海森矩阵 ---
 option(ANALYTIC_HESSIAN "Use analytic Hessian in ego-motion estimation" OFF)
 if(ANALYTIC_HESSIAN)

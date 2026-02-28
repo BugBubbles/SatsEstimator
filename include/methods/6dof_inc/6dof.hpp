@@ -59,18 +59,33 @@ namespace spatiotemporal_vo
       // 创建翘曲事件图像
       int pad_width = width_ + 2 * padding_;
       int pad_height = height_ + 2 * padding_;
+#ifdef SEPARATE_POLARITY
+      warped_image_pos_.setZero();
+      warped_image_neg_.setZero();
+#else
       warped_image_.setZero();
+#endif
 // 初始化梯度和海森矩阵图像
 #pragma omp parallel for
       for (int i = 0; i < 6; ++i)
       {
+#ifdef SEPARATE_POLARITY
+        iwe_grad_pos_[i].setZero();
+        iwe_grad_neg_[i].setZero();
+#else
         iwe_grad_[i].setZero();
+#endif
       }
 #ifdef ANALYTIC_HESSIAN
 #pragma omp parallel for
       for (int i = 0; i < 36; ++i)
       {
+#ifdef SEPARATE_POLARITY
+        iwe_hess_pos_[i].setZero();
+        iwe_hess_neg_[i].setZero();
+#else
         iwe_hess_[i].setZero();
+#endif
       }
 #endif
       double warped_x, warped_y, event_x, event_y;
@@ -127,7 +142,49 @@ namespace spatiotemporal_vo
           double w3 = (1.0 - dx) * dy;
           double w2 = dx * (1.0 - dy);
           double w1 = (1.0 - dx) * (1.0 - dy);
-
+#ifdef SEPARATE_POLARITY
+          switch (polarity_->at(i))
+          {
+          case 1:
+            warped_image_pos_(y, x) += w1;
+            warped_image_pos_(y, x + 1) += w2;
+            warped_image_pos_(y + 1, x) += w3;
+            warped_image_pos_(y + 1, x + 1) += w4;
+            // 计算梯度
+            warp_gradient(parameters, point_, dt, grad_warp, hess_warp);
+            assign_vec((dy - 1) * grad_warp.row(0) + (dx - 1) * grad_warp.row(1), iwe_grad_pos_, x, y);
+            assign_vec((1 - dy) * grad_warp.row(0) + (-dx) * grad_warp.row(1), iwe_grad_pos_, x + 1, y);
+            assign_vec((-dy) * grad_warp.row(0) + (1 - dx) * grad_warp.row(1), iwe_grad_pos_, x, y + 1);
+            assign_vec(dy * grad_warp.row(0) + dx * grad_warp.row(1), iwe_grad_pos_, x + 1, y + 1);
+            // 计算海森矩阵
+#ifdef ANALYTIC_HESSIAN
+            assign_mat(hess_warp, iwe_hess_pos_, x, y);
+            assign_mat(-hess_warp, iwe_hess_pos_, x + 1, y);
+            assign_mat(-hess_warp, iwe_hess_pos_, x, y + 1);
+            assign_mat(hess_warp, iwe_hess_pos_, x + 1, y + 1);
+#endif
+            break;
+          case -1:
+            warped_image_neg_(y, x) += w1;
+            warped_image_neg_(y, x + 1) += w2;
+            warped_image_neg_(y + 1, x) += w3;
+            warped_image_neg_(y + 1, x + 1) += w4;
+            // 计算梯度
+            warp_gradient(parameters, point_, dt, grad_warp, hess_warp);
+            assign_vec((dy - 1) * grad_warp.row(0) + (dx - 1) * grad_warp.row(1), iwe_grad_neg_, x, y);
+            assign_vec((1 - dy) * grad_warp.row(0) + (-dx) * grad_warp.row(1), iwe_grad_neg_, x + 1, y);
+            assign_vec((-dy) * grad_warp.row(0) + (1 - dx) * grad_warp.row(1), iwe_grad_neg_, x, y + 1);
+            assign_vec(dy * grad_warp.row(0) + dx * grad_warp.row(1), iwe_grad_neg_, x + 1, y + 1);
+            // 计算海森矩阵
+#ifdef ANALYTIC_HESSIAN
+            assign_mat(hess_warp, iwe_hess_neg_, x, y);
+            assign_mat(-hess_warp, iwe_hess_neg_, x + 1, y);
+            assign_mat(-hess_warp, iwe_hess_neg_, x, y + 1);
+            assign_mat(hess_warp, iwe_hess_neg_, x + 1, y + 1);
+#endif
+            break;
+          }
+#else
           warped_image_(y, x) += w1;
           warped_image_(y, x + 1) += w2;
           warped_image_(y + 1, x) += w3;
@@ -145,17 +202,27 @@ namespace spatiotemporal_vo
           assign_mat(-hess_warp, iwe_hess_, x, y + 1);
           assign_mat(hess_warp, iwe_hess_, x + 1, y + 1);
 #endif
+#endif
         }
       }
+#ifdef SEPARATE_POLARITY
+      blur_eigen_mat(warped_image_pos_);
+      blur_eigen_mat(warped_image_neg_);
+#else
       blur_eigen_mat(warped_image_);
-
+#endif
 // 2. 模糊雅可比图
 // 这实际上是在计算：参数微扰动会导致"模糊后的图像"发生怎样的变化
 // 没有这一步，梯度就是针对"尖锐"图像的，与 Loss 不匹配
 #pragma omp parallel for
       for (int k = 0; k < 6; ++k)
       {
+#ifdef SEPARATE_POLARITY
+        blur_eigen_mat(iwe_grad_pos_[k]);
+        blur_eigen_mat(iwe_grad_neg_[k]);
+#else
         blur_eigen_mat(iwe_grad_[k]);
+#endif
       }
 
 // 3. 模糊海森图
@@ -163,35 +230,66 @@ namespace spatiotemporal_vo
 #pragma omp parallel for
       for (int k = 0; k < 36; ++k)
       {
+#ifdef SEPARATE_POLARITY
+        blur_eigen_mat(iwe_hess_pos_[k]);
+        blur_eigen_mat(iwe_hess_neg_[k]);
+#else
         blur_eigen_mat(iwe_hess_[k]);
+#endif
       }
 #endif
-      // 计算最终的梯度与海森矩阵
+// 计算最终的梯度与海森矩阵
+#ifdef SEPARATE_POLARITY
+      double loss_pos, loss_neg;
+      iwe_gradient(warped_image_pos_, loss_pos, pixel_grad_pos_, pixel_hess_pos_);
+      iwe_gradient(warped_image_neg_, loss_neg, pixel_grad_neg_, pixel_hess_neg_);
+      loss = loss_pos + loss_neg;
+#else
       iwe_gradient(warped_image_, loss, pixel_grad_, pixel_hess_);
+#endif
 // 计算总梯度，各个像素梯度的加权和
 // gradient 等于将 pixel_grad 与 iwe_grad_ 第一个通道按像素位置对应相乘后求和
 #pragma omp parallel for
       for (int i = 0; i < 6; ++i)
       {
+#ifdef SEPARATE_POLARITY
+        gradient(i) = (pixel_grad_pos_.array() * iwe_grad_pos_[i].array()).sum() + (pixel_grad_neg_.array() * iwe_grad_neg_[i].array()).sum();
+#else
         gradient(i) = (pixel_grad_.array() * iwe_grad_[i].array()).sum();
+#endif
       }
 #pragma omp parallel for
       for (int i = 0; i < 6; ++i)
       {
 #ifdef ANALYTIC_HESSIAN
+#ifdef SEPARATE_POLARITY
+        hessian(i, i) = (pixel_grad_pos_.array() * iwe_hess_pos_[6 * i + i].array()).sum() + (pixel_hess_pos_.array() * iwe_grad_pos_[i].array() * iwe_grad_pos_[i].array()).sum() + (pixel_grad_neg_.array() * iwe_hess_neg_[6 * i + i].array()).sum() + (pixel_hess_neg_.array() * iwe_grad_neg_[i].array() * iwe_grad_neg_[i].array()).sum();
+#else
         hessian(i, i) = (pixel_grad_.array() * iwe_hess_[6 * i + i].array()).sum() + (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[i].array()).sum();
+#endif
+#else
+#ifdef SEPARATE_POLARITY
+        hessian(i, i) = (pixel_hess_pos_.array() * iwe_grad_pos_[i].array() * iwe_grad_pos_[i].array()).sum() + (pixel_hess_neg_.array() * iwe_grad_neg_[i].array() * iwe_grad_neg_[i].array()).sum();
 #else
         hessian(i, i) = (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[i].array()).sum();
+#endif
 #endif
         for (int j = i + 1; j < 6; ++j)
         {
 #ifdef ANALYTIC_HESSIAN
+#ifdef SEPARATE_POLARITY
+          hessian(i, j) = (pixel_grad_pos_.array() * iwe_hess_pos_[6 * i + j].array()).sum() + (pixel_hess_pos_.array() * iwe_grad_pos_[i].array() * iwe_grad_pos_[j].array()).sum() + (pixel_grad_neg_.array() * iwe_hess_neg_[6 * i + j].array()).sum() + (pixel_hess_neg_.array() * iwe_grad_neg_[i].array() * iwe_grad_neg_[j].array()).sum();
+#else
           hessian(i, j) = (pixel_grad_.array() * iwe_hess_[6 * i + j].array()).sum() + (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
-          hessian(j, i) = hessian(i, j); // 对称矩阵
+#endif
+#else
+#ifdef SEPARATE_POLARITY
+          hessian(i, j) = (pixel_hess_pos_.array() * iwe_grad_pos_[i].array() * iwe_grad_pos_[j].array()).sum() + (pixel_hess_neg_.array() * iwe_grad_neg_[i].array() * iwe_grad_neg_[j].array()).sum();
 #else
           hessian(i, j) = (pixel_hess_.array() * iwe_grad_[i].array() * iwe_grad_[j].array()).sum();
-          hessian(j, i) = hessian(i, j); // 对称矩阵
 #endif
+#endif
+          hessian(j, i) = hessian(i, j); // 对称矩阵
         }
       }
     }

@@ -13,20 +13,45 @@ namespace spatiotemporal_vo
   /**
    * @brief
    */
-   template<int N>
+  template <int N>
   class MotionEstimator
   {
   public:
-
     /**
      * @brief 构造函数
      * @param fx, fy, cx, cy 相机内参
      * @param width, height 图像尺寸
      */
     MotionEstimator(double fx, double fy, double cx, double cy,
-                      int width, int height) : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
-  {
-    // 初始化梯度和海森矩阵图像容器
+                    int width, int height) : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
+    {
+      // 初始化梯度和海森矩阵图像容器
+#ifdef SEPARATE_POLARITY
+      warped_image_pos_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      warped_image_neg_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      pixel_grad_pos_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      pixel_grad_neg_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      pixel_hess_pos_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      pixel_hess_neg_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      iwe_grad_pos_.resize(N);
+      iwe_grad_neg_.resize(N);
+#ifdef ANALYTIC_HESSIAN
+      iwe_hess_pos_.resize(N * N);
+      iwe_hess_neg_.resize(N * N);
+#endif
+      for (int i = 0; i < N; ++i)
+      {
+        iwe_grad_pos_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+        iwe_grad_neg_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      }
+#ifdef ANALYTIC_HESSIAN
+      for (int i = 0; i < N * N; ++i)
+      {
+        iwe_hess_pos_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+        iwe_hess_neg_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
+      }
+#endif
+#else
       warped_image_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       pixel_grad_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
       pixel_hess_.resize(height_ + 2 * padding_, width_ + 2 * padding_);
@@ -44,7 +69,8 @@ namespace spatiotemporal_vo
         iwe_hess_[i].resize(height_ + 2 * padding_, width_ + 2 * padding_);
       }
 #endif
-  };
+#endif
+    };
 
     /**
      * @brief 虚析构函数
@@ -58,50 +84,50 @@ namespace spatiotemporal_vo
      * @return 估计结果
      */
     virtual RegistrationOutput<N> run(const Config &config, const EventPacket &packet)
-  {
-    points_ = &packet.coord_3d;
-    delta_time_ = &packet.t;
-    polarity_ = &packet.polarity;
-    n_points_ = points_->size();
-
-    RegistrationOutput<N> result;
-
-    if (n_points_ < 10)
     {
-      result.params.setZero();
-      result.stats.loss = 0;
-      result.stats.time_taken = 0.0;
-      result.stats.num_iterations = 0;
-      return result;
-    }
+      points_ = &packet.coord_3d;
+      delta_time_ = &packet.t;
+      polarity_ = &packet.polarity;
+      n_points_ = points_->size();
 
-    std::cout << '[' << count_ << "] " <<  "<<" << getMethodName() << ">>" << ": Processing "
-              << n_points_ << " events, duration: "
-              << delta_time_->back() - delta_time_->front()<< "s" << std::endl;
-    result.stats.time_taken = omp_get_wtime();
+      RegistrationOutput<N> result;
 
-    // 运行优化
-    MainOptimize(config);
+      if (n_points_ < 10)
+      {
+        result.params.setZero();
+        result.stats.loss = 0;
+        result.stats.time_taken = 0.0;
+        result.stats.num_iterations = 0;
+        return result;
+      }
 
-    // 更新结果
+      std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" << ": Processing "
+                << n_points_ << " events, duration: "
+                << delta_time_->back() - delta_time_->front() << "s" << std::endl;
+      result.stats.time_taken = omp_get_wtime();
+
+      // 运行优化
+      MainOptimize(config);
+
+      // 更新结果
 #ifdef DEBUG
-    std::cout << "[DEBUG] Final estimated parammeters: " << est_params_.transpose() << std::endl;
+      std::cout << "[DEBUG] Final estimated parammeters: " << est_params_.transpose() << std::endl;
 #endif
-    // 运行优化
-    result.stats.loss = final_loss_;
-    result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
-    std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" <<": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
+      // 运行优化
+      result.stats.loss = final_loss_;
+      result.stats.time_taken = omp_get_wtime() - result.stats.time_taken;
+      std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" << ": Optimization took " << result.stats.time_taken << " seconds." << std::endl;
 
-    // 填充结果
-    result.params = est_params_;
-    result.stats.num_iterations = count_;
+      // 填充结果
+      result.params = est_params_;
+      result.stats.num_iterations = count_;
 
-    std::cout << '[' << count_ << "] " <<   "<<" << getMethodName() << ">>" <<": Estimated parammeters: "
-              << est_params_.transpose()
-              << ", best loss: " << result.stats.loss << std::endl;
-    count_++;
-    return result;
-  };
+      std::cout << '[' << count_ << "] " << "<<" << getMethodName() << ">>" << ": Estimated parammeters: "
+                << est_params_.transpose()
+                << ", best loss: " << result.stats.loss << std::endl;
+      count_++;
+      return result;
+    };
     /**
      * @brief 获取当前估计的角速度
      */
@@ -111,26 +137,40 @@ namespace spatiotemporal_vo
      * @brief 获取最终损失值
      */
     double getFinalLoss() const { return final_loss_; }
-    
+
   protected:
-      // 相机内参矩阵
+    // 相机内参矩阵
     double fx_, fy_, cx_, cy_;
     int width_, height_, padding_ = 100;
-    const std::vector<double>* delta_time_;
-    const std::vector<int>* polarity_;
+    const std::vector<double> *delta_time_;
+    const std::vector<int> *polarity_;
 #ifdef ANALYTIC_HESSIAN
+#ifdef SEPARATE_POLARITY
+    std::vector<EigenMat> iwe_hess_pos_, iwe_hess_neg_, iwe_grad_pos_, iwe_grad_neg_;
+#else
     std::vector<EigenMat> iwe_hess_, iwe_grad_;
+#endif
+#else
+#ifdef SEPARATE_POLARITY
+    std::vector<EigenMat> iwe_grad_pos_, iwe_grad_neg_;
 #else
     std::vector<EigenMat> iwe_grad_;
 #endif
+#endif
     int n_points_;
     double final_loss_ = 0.0;
+#ifdef SEPARATE_POLARITY
+    EigenMat warped_image_pos_, warped_image_neg_;
+    EigenMat pixel_grad_pos_, pixel_grad_neg_;
+    EigenMat pixel_hess_pos_, pixel_hess_neg_;
+#else
     EigenMat warped_image_, pixel_grad_, pixel_hess_;
+#endif
     Eigen::Matrix<double, N, 1> est_params_; // 当前估计的角速度
     // 估计状态
     int count_;
 
-    const std::vector<Vec3>* points_;
+    const std::vector<Vec3> *points_;
     virtual std::string getMethodName() const { return "MotionEstimator"; }
     /**
      * @brief 计算CMax函数对像素的一阶梯度
