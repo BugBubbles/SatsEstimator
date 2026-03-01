@@ -39,7 +39,7 @@ double trigamma(double x) {
   public:
     using SixDofIncEstimator::SixDofIncEstimator; // 继承所有基类构造函数
   protected:
-    std::string getMethodName() const override { return "STPPPSixDof"; }
+    std::string getMethodName() const override { return "STPPPSixDofInc"; }
     void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
     {
       // STPPP
