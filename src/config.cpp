@@ -9,49 +9,14 @@ namespace spatiotemporal_vo
 
   Config::Config()
   {
-    setDefaults();
   }
 
   Config::Config(const std::string &config_file)
   {
-    setDefaults();
     if (!config_file.empty())
     {
       load(config_file);
     }
-  }
-
-  void Config::setDefaults()
-  {
-    // Solver 默认配置
-    solver.max_iters = 10;
-    solver.lr = 1.0;
-    solver.decay = 0.98;
-    solver.epsilon_T = 0.05;
-    solver.trim_ratio = 0.9;
-    solver.convergence_thresh = 1e-6;
-    solver.regularization = 0.0;
-
-    // Camera 默认配置
-    camera.fx = 500.0;
-    camera.fy = 500.0;
-    camera.cx = 173.0;
-    camera.cy = 130.0;
-    camera.width = 346;
-    camera.height = 260;
-
-    // 路径默认配置
-    paths.data_root = ".";
-    paths.calib_path = "calib.txt";
-    paths.event_file = "events.txt";
-    paths.gt_file = "groundtruth.txt";
-    paths.output_root = "./results";
-    paths.suffix = "temp";
-
-    // Data 默认配置
-    data.time_window = 0.05;
-    data.max_events = 100;
-    data.event_count = 30000;
   }
 
   bool Config::loadCalibration(const std::string &filepath)

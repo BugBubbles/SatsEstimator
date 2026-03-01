@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <opencv2/opencv.hpp>
+#include <omp.h>
 #include <memory>
 #include <numeric>
 #include <vector>
@@ -22,7 +23,6 @@ namespace spatiotemporal_vo
   {
     double loss = 0.0;
     double time_taken = 0.0;
-    int num_inliers = 0;
     int num_iterations = 0;
   };
 
@@ -46,7 +46,7 @@ namespace spatiotemporal_vo
     std::vector<Vec3> coord_3d;     // 3D坐标
     double t_start, t_end;        // 时间范围
 
-    size_t size() const { return xy.size(); }
+    int size() const { return xy.size(); }
     bool empty() const { return xy.empty(); }
     void set_timespan() {t_start = t.front(); t_end = t.back();}
     void clear()
@@ -58,6 +58,14 @@ namespace spatiotemporal_vo
       depth.clear();
       t_start = t_end = 0.0;
     }
+    void resize(size_t n)
+    {
+      xy.resize(n);
+      t.resize(n);
+      polarity.resize(n);
+      coord_3d.resize(n);
+      depth.resize(n);
+    }
     EventPacket operator+=(const EventPacket &other)
     {
       xy.insert(xy.end(), other.xy.begin(), other.xy.end());
@@ -65,6 +73,17 @@ namespace spatiotemporal_vo
       polarity.insert(polarity.end(), other.polarity.begin(), other.polarity.end());
       coord_3d.insert(coord_3d.end(), other.coord_3d.begin(), other.coord_3d.end());
       depth.insert(depth.end(), other.depth.begin(), other.depth.end());
+      t_end = other.t_end;
+      return *this;
+    }
+    EventPacket &operator=(const EventPacket &other)
+    {
+      xy = other.xy;
+      t = other.t;
+      polarity = other.polarity;
+      coord_3d = other.coord_3d;
+      depth = other.depth;
+      t_start = other.t_start;
       t_end = other.t_end;
       return *this;
     }

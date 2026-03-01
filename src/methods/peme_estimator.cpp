@@ -142,7 +142,7 @@ namespace spatiotemporal_vo
     ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_early_ptr_;
     ceres::BiCubicInterpolator<ceres::Grid2D<double, 1>> *interpolator_later_ptr_;
   };
-struct PEMESixDof
+  struct PEMESixDof
   {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     PEMESixDof(
@@ -211,6 +211,8 @@ struct PEMESixDof
     // 初始化估计状态
     est_vec3_.setZero();
     est_vec6_.setZero();
+
+    use_dynamic_batch_ = config.data.adaptive_split;
   }
 
   void PEMEEstimator::getSampledIndices(const cv::Mat &iwe, std::vector<int> &indices, int count,
@@ -219,185 +221,37 @@ struct PEMESixDof
     cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
     for (int i = 0; i < count;)
     {
-      int sample_idx = rng.uniform(int(eventBundle_.size * start_ratio), int(eventBundle_.size * end_ratio));
+      int sample_idx = rng.uniform(int(eventBundle_.size() * start_ratio), int(eventBundle_.size() * end_ratio));
 
       // check valid 8 neighbor hood existed
-      int sampled_x = eventBundle_.coord[sample_idx].x() + padding_;
-      int sampled_y = eventBundle_.coord[sample_idx].y() + padding_;
+      int sampled_x = eventBundle_.xy[sample_idx].x() + padding_;
+      int sampled_y = eventBundle_.xy[sample_idx].y() + padding_;
       if (sampled_x > 0 && sampled_x < width_ + 2 * padding_ - 1 &&
           sampled_y > 0 && sampled_y < height_ + 2 * padding_ - 1)
       {
-      int count = 0;
-      for (int j = -1; j < 2; j++)
-        for (int k = -1; k < 2; k++)
+        int count = 0;
+        for (int j = -1; j < 2; j++)
+          for (int k = -1; k < 2; k++)
+          {
+            count += int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
+          }
+
+        if (count > params_.denoise_num)
         {
-          count += int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
+          indices.push_back(sample_idx);
+          i++;
         }
-
-      if (count > params_.denoise_num)
-      {
-        indices.push_back(sample_idx);
-        i++;
       }
-    }
     }
   }
-  cv::Mat PEMEEstimator::getWarpedEventImageRotation(const Vec3 &angularVelocity,
-                                             EventBundle &warped_bundle,
-                                             bool use_later_time)
-  {
-    warped_bundle.coord.clear();
-    warped_bundle.coord_3d.clear();
-    warped_bundle.isInner.clear();
-    // 创建三通道16位无符号整型图像
-    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16U);
-    int n = eventBundle_.size;
 
-    warped_bundle.coord.resize(n);
-    warped_bundle.coord_3d.resize(n);
-    warped_bundle.isInner.resize(n);
-    warped_bundle.size = n;
-
-    double ref_time = use_later_time ? eventBundle_.time_delta.back() : 0.0;
-    Vec3 point_first, p3d, rotation_vec;
-    for (int i = 0; i < n; ++i)
-    {
-      double dt = eventBundle_.time_delta[i] - ref_time;
-      rotation_vec = angularVelocity * dt;
-      p3d = eventBundle_.coord_3d[i];
-      point_first(0) = -rotation_vec(2) * p3d(1) + rotation_vec(1) * p3d(2);
-      point_first(1) = rotation_vec(2) * p3d(0) - rotation_vec(0) * p3d(2);
-      point_first(2) = -rotation_vec(1) * p3d(0) + rotation_vec(0) * p3d(1);
-      
-      p3d += point_first;
-        
-      // 投影到 2D
-      double x = p3d(0) / p3d(2) * fx_ + cx_;
-      double y = p3d(1) / p3d(2) * fy_ + cy_;
-
-      warped_bundle.coord[i] = Vec2(x, y);
-      warped_bundle.coord_3d[i] = p3d;
-
-      // 检查是否在图像内
-      if (x >= -padding_ && x <= width_ + padding_ - 1 &&
-          y >= -padding_ && y <= height_ + padding_ - 1)
-      {
-        warped_bundle.isInner[i] = true;
-        image.at<unsigned short>(y + padding_, x + padding_) += 1;
-      }
-      else
-      {
-        warped_bundle.isInner[i] = false;
-      }
-    }
-
-    return image;
-  }
-
-    cv::Mat PEMEEstimator::getWarpedEventImageTranslation(const Vec3 &transVelocity,
-                                             EventBundle &warped_bundle,
-                                             bool use_later_time)
-  {
-    warped_bundle.coord.clear();
-    warped_bundle.coord_3d.clear();
-    warped_bundle.isInner.clear();
-    // 创建三通道16位无符号整型图像
-    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16U);
-    int n = eventBundle_.size;
-
-    warped_bundle.coord.resize(n);
-    warped_bundle.coord_3d.resize(n);
-    warped_bundle.isInner.resize(n);
-    warped_bundle.size = n;
-
-    double ref_time = use_later_time ? eventBundle_.time_delta.back() : 0.0;
-    Vec3 p3d;
-    for (int i = 0; i < n; ++i)
-    {
-      double dt = eventBundle_.time_delta[i] - ref_time;
-      p3d = eventBundle_.coord_3d[i] + transVelocity * dt;
-        
-      // 投影到 2D
-      double x = p3d(0) / p3d(2) * fx_ + cx_;
-      double y = p3d(1) / p3d(2) * fy_ + cy_;
-
-      warped_bundle.coord[i] = Vec2(x, y);
-      warped_bundle.coord_3d[i] = p3d;
-
-      // 检查是否在图像内
-      if (x >= -padding_ && x <= width_ + padding_ - 1 &&
-          y >= -padding_ && y <= height_ + padding_ - 1)
-      {
-        warped_bundle.isInner[i] = true;
-        image.at<unsigned short>(y + padding_, x + padding_) += 1;
-      }
-      else
-      {
-        warped_bundle.isInner[i] = false;
-      }
-    }
-
-    return image;
-  }
-
-    cv::Mat PEMEEstimator::getWarpedEventImageSixDof(const Vec6 &trans_rot_vec,
-                                             EventBundle &warped_bundle,
-                                             bool use_later_time)
-  {
-    warped_bundle.coord.clear();
-    warped_bundle.coord_3d.clear();
-    warped_bundle.isInner.clear();
-    // 创建三通道16位无符号整型图像
-    cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16U);
-    int n = eventBundle_.size;
-
-    warped_bundle.coord.resize(n);
-    warped_bundle.coord_3d.resize(n);
-    warped_bundle.isInner.resize(n);
-    warped_bundle.size = n;
-
-    double ref_time = use_later_time ? eventBundle_.time_delta.back() : 0.0;
-    Vec3 point_first, p3d, rotation_vec, trans_vec;
-    for (int i = 0; i < n; ++i)
-    {
-      double dt = eventBundle_.time_delta[i] - ref_time;
-      trans_vec = trans_rot_vec.head<3>() * dt;
-      rotation_vec = trans_rot_vec.tail<3>() * dt;
-      p3d = eventBundle_.coord_3d[i];
-      point_first(0) = trans_vec(0) - rotation_vec(2) * p3d(1) + rotation_vec(1) * p3d(2);
-      point_first(1) = trans_vec(1) + rotation_vec(2) * p3d(0) - rotation_vec(0) * p3d(2);
-      point_first(2) = trans_vec(2) - rotation_vec(1) * p3d(0) + rotation_vec(0) * p3d(1);
-      
-      p3d += point_first;
-        
-      // 投影到 2D
-      double x = p3d(0) / p3d(2) * fx_ + cx_;
-      double y = p3d(1) / p3d(2) * fy_ + cy_;
-
-      warped_bundle.coord[i] = Vec2(x, y);
-      warped_bundle.coord_3d[i] = p3d;
-
-      // 检查是否在图像内
-      if (x >= -padding_ && x <= width_ + padding_ - 1 &&
-          y >= -padding_ && y <= height_ + padding_ - 1)
-      {
-        warped_bundle.isInner[i] = true;
-        image.at<unsigned short>(y + padding_, x + padding_) += 1;
-      }
-      else
-      {
-        warped_bundle.isInner[i] = false;
-      }
-    }
-
-    return image;
-  }
   double PEMEEstimator::optimizeRotation()
   {
     double angleAxis[3] = {est_vec3_(0), est_vec3_(1), est_vec3_(2)};
     double best_loss = std::numeric_limits<double>::max();
     // 获取 warp 后的事件图像
-    cv::Mat iwe = getWarpedEventImageRotation(Vec3::Zero(), event_warpped_Bundle_);
+    std::vector<bool> isInner(eventBundle_.size());
+    cv::Mat iwe = getWarpedEventImage(Vec3::Zero(), Vec3::Zero(), event_warpped_Bundle_, isInner);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec3 eg_angleAxis(angleAxis[0], angleAxis[1], angleAxis[2]);
@@ -410,40 +264,40 @@ struct PEMESixDof
       cv::Mat cv_earlier_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
       cv::Mat cv_later_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
 
-      double early_default_value = eventBundle_.time_delta[static_cast<int>(eventBundle_.size * timesurface_range)];
+      double early_default_value = eventBundle_.t[static_cast<int>(eventBundle_.size() * timesurface_range)];
       cv_earlier_timesurface.setTo(early_default_value * params_.default_value_factor);
 
-      double later_default_value = eventBundle_.time_delta.back() -
-                                  eventBundle_.time_delta[static_cast<int>(eventBundle_.size * (1 - timesurface_range))];
+      double later_default_value = eventBundle_.t.back() -
+                                   eventBundle_.t[static_cast<int>(eventBundle_.size() * (1 - timesurface_range))];
       cv_later_timesurface.setTo(later_default_value * params_.default_value_factor);
 
       // 获取 warp 后的事件图像
-      getWarpedEventImageRotation(eg_angleAxis, event_warpped_Bundle_);
+      getWarpedEventImage(Vec3::Zero(), eg_angleAxis, event_warpped_Bundle_, isInner);
 
       // 构建 earlier 时间表面
-      for (int i = event_warpped_Bundle_.size * timesurface_range; i >= 0; --i)
+      for (int i = event_warpped_Bundle_.size() * timesurface_range; i >= 0; --i)
       {
-        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
-        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
+        int sampled_x = std::round(event_warpped_Bundle_.xy[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.xy[i](1));
 
-        if (!event_warpped_Bundle_.isInner[i])
+        if (!isInner[i])
           continue;
 
-        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta[i];
+        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.t[i];
       }
 
       // 获取 later 时间表面
-      getWarpedEventImageRotation(eg_angleAxis, event_warpped_Bundle_, true);
+      getWarpedEventImage(Vec3::Zero(), eg_angleAxis, event_warpped_Bundle_, isInner, true);
 
-      for (int i = event_warpped_Bundle_.size * (1 - timesurface_range);i < event_warpped_Bundle_.size; ++i)
+      for (int i = event_warpped_Bundle_.size() * (1 - timesurface_range); i < event_warpped_Bundle_.size(); ++i)
       {
-        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
-        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
+        int sampled_x = std::round(event_warpped_Bundle_.xy[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.xy[i](1));
 
-        if (!event_warpped_Bundle_.isInner[i])
+        if (!isInner[i])
           continue;
 
-        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta.back() - eventBundle_.time_delta[i];
+        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.t.back() - eventBundle_.t[i];
       }
 
       // 高斯模糊
@@ -461,7 +315,7 @@ struct PEMESixDof
 
       // 采样
       std::vector<int> vec_sampled_idx;
-      int samples_count = std::min(params_.sample_count, eventBundle_.size);
+      int samples_count = std::min(params_.sample_count, eventBundle_.size());
       getSampledIndices(iwe, vec_sampled_idx, samples_count, 0.0, 1.0);
 
       // 构建 Ceres 问题
@@ -469,16 +323,16 @@ struct PEMESixDof
       // 将vec_sampled_idx打印至文件流中
       for (int sample_idx : vec_sampled_idx)
       {
-        double early_time = eventBundle_.time_delta[sample_idx];
-        double later_time = eventBundle_.time_delta[sample_idx] - eventBundle_.time_delta.back();
+        double early_time = eventBundle_.t[sample_idx];
+        double later_time = eventBundle_.t[sample_idx] - eventBundle_.t.back();
 
         ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMERotation, 1, 3>(
             new spatiotemporal_vo::PEMERotation(eventBundle_.coord_3d[sample_idx],
-                                                            padding_,
-                                                            early_time, later_time,
-                                                            fx_, fy_, cx_, cy_,
-                                                            interpolator_early_ptr.get(),
-                                                            interpolator_later_ptr.get()));
+                                                padding_,
+                                                early_time, later_time,
+                                                fx_, fy_, cx_, cy_,
+                                                interpolator_early_ptr.get(),
+                                                interpolator_later_ptr.get()));
 
         problem.AddResidualBlock(cost_function, nullptr, &angleAxis[0]);
       }
@@ -534,7 +388,9 @@ struct PEMESixDof
     double transAxis[3] = {est_vec3_(0), est_vec3_(1), est_vec3_(2)};
     double best_loss = std::numeric_limits<double>::max();
     // 获取 warp 后的事件图像
-    cv::Mat iwe = getWarpedEventImageTranslation(Vec3(0, 0, 0), event_warpped_Bundle_);
+    std::vector<bool> isInner(eventBundle_.size());
+    cv::Mat iwe = getWarpedEventImage(Vec3::Zero(), Vec3::Zero(), event_warpped_Bundle_, isInner);
+
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec3 eg_transAxis(transAxis[0], transAxis[1], transAxis[2]);
@@ -547,40 +403,40 @@ struct PEMESixDof
       cv::Mat cv_earlier_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
       cv::Mat cv_later_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
 
-      double early_default_value = eventBundle_.time_delta[static_cast<int>(eventBundle_.size * timesurface_range)];
+      double early_default_value = eventBundle_.t[static_cast<int>(eventBundle_.size() * timesurface_range)];
       cv_earlier_timesurface.setTo(early_default_value * params_.default_value_factor);
 
-      double later_default_value = eventBundle_.time_delta.back() -
-                                  eventBundle_.time_delta[static_cast<int>(eventBundle_.size * (1 - timesurface_range))];
+      double later_default_value = eventBundle_.t.back() -
+                                   eventBundle_.t[static_cast<int>(eventBundle_.size() * (1 - timesurface_range))];
       cv_later_timesurface.setTo(later_default_value * params_.default_value_factor);
 
       // 获取 warp 后的事件图像
-      getWarpedEventImageTranslation(eg_transAxis, event_warpped_Bundle_);
+      getWarpedEventImage(eg_transAxis, Vec3::Zero(), event_warpped_Bundle_, isInner);
 
       // 构建 earlier 时间表面
-      for (int i = event_warpped_Bundle_.size * timesurface_range; i >= 0; --i)
+      for (int i = event_warpped_Bundle_.size() * timesurface_range; i >= 0; --i)
       {
-        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
-        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
+        int sampled_x = std::round(event_warpped_Bundle_.xy[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.xy[i](1));
 
-        if (!event_warpped_Bundle_.isInner[i])
+        if (!isInner[i])
           continue;
 
-        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta[i];
+        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.t[i];
       }
 
       // 获取 later 时间表面
-      getWarpedEventImageTranslation(eg_transAxis, event_warpped_Bundle_, true);
+      getWarpedEventImage(eg_transAxis, Vec3::Zero(), event_warpped_Bundle_, isInner, true);
 
-      for (int i = event_warpped_Bundle_.size * (1 - timesurface_range);i < event_warpped_Bundle_.size; ++i)
+      for (int i = event_warpped_Bundle_.size() * (1 - timesurface_range); i < event_warpped_Bundle_.size(); ++i)
       {
-        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
-        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
+        int sampled_x = std::round(event_warpped_Bundle_.xy[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.xy[i](1));
 
-        if (!event_warpped_Bundle_.isInner[i])
+        if (!isInner[i])
           continue;
 
-        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta.back() - eventBundle_.time_delta[i];
+        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.t.back() - eventBundle_.t[i];
       }
 
       // 高斯模糊
@@ -598,7 +454,7 @@ struct PEMESixDof
 
       // 采样
       std::vector<int> vec_sampled_idx;
-      int samples_count = std::min(params_.sample_count, eventBundle_.size);
+      int samples_count = std::min(params_.sample_count, eventBundle_.size());
       getSampledIndices(iwe, vec_sampled_idx, samples_count, 0.0, 1.0);
 
       // 构建 Ceres 问题
@@ -606,16 +462,16 @@ struct PEMESixDof
       // 将vec_sampled_idx打印至文件流中
       for (int sample_idx : vec_sampled_idx)
       {
-        double early_time = eventBundle_.time_delta[sample_idx];
-        double later_time = eventBundle_.time_delta[sample_idx] - eventBundle_.time_delta.back();
+        double early_time = eventBundle_.t[sample_idx];
+        double later_time = eventBundle_.t[sample_idx] - eventBundle_.t.back();
 
         ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMETranslation, 1, 3>(
             new spatiotemporal_vo::PEMETranslation(eventBundle_.coord_3d[sample_idx],
-                                                            padding_,
-                                                            early_time, later_time,
-                                                            fx_, fy_, cx_, cy_,
-                                                            interpolator_early_ptr.get(),
-                                                            interpolator_later_ptr.get()));
+                                                   padding_,
+                                                   early_time, later_time,
+                                                   fx_, fy_, cx_, cy_,
+                                                   interpolator_early_ptr.get(),
+                                                   interpolator_later_ptr.get()));
 
         problem.AddResidualBlock(cost_function, nullptr, &transAxis[0]);
       }
@@ -671,7 +527,8 @@ struct PEMESixDof
     double trans_rot_vec[6] = {est_vec6_(0), est_vec6_(1), est_vec6_(2), est_vec6_(3), est_vec6_(4), est_vec6_(5)};
     double best_loss = std::numeric_limits<double>::max();
     // 获取 warp 后的事件图像
-    cv::Mat iwe = getWarpedEventImageSixDof(Vec6::Zero(), event_warpped_Bundle_);
+    std::vector<bool> isInner(eventBundle_.size());
+    cv::Mat iwe = getWarpedEventImage(Vec3::Zero(), Vec3::Zero(), event_warpped_Bundle_, isInner);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
       Vec6 eg_vec6;
@@ -685,40 +542,40 @@ struct PEMESixDof
       cv::Mat cv_earlier_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
       cv::Mat cv_later_timesurface = cv::Mat(height_ + 2 * padding_, width_ + 2 * padding_, CV_64F);
 
-      double early_default_value = eventBundle_.time_delta[static_cast<int>(eventBundle_.size * timesurface_range)];
+      double early_default_value = eventBundle_.t[static_cast<int>(eventBundle_.size() * timesurface_range)];
       cv_earlier_timesurface.setTo(early_default_value * params_.default_value_factor);
 
-      double later_default_value = eventBundle_.time_delta.back() -
-                                  eventBundle_.time_delta[static_cast<int>(eventBundle_.size * (1 - timesurface_range))];
+      double later_default_value = eventBundle_.t.back() -
+                                   eventBundle_.t[static_cast<int>(eventBundle_.size() * (1 - timesurface_range))];
       cv_later_timesurface.setTo(later_default_value * params_.default_value_factor);
 
       // 获取 warp 后的事件图像
-      getWarpedEventImageSixDof(eg_vec6, event_warpped_Bundle_);
+      getWarpedEventImage(eg_vec6.head<3>(), eg_vec6.tail<3>(), event_warpped_Bundle_, isInner);
 
       // 构建 earlier 时间表面
-      for (int i = event_warpped_Bundle_.size * timesurface_range; i >= 0; --i)
+      for (int i = event_warpped_Bundle_.size() * timesurface_range; i >= 0; --i)
       {
-        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
-        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
+        int sampled_x = std::round(event_warpped_Bundle_.xy[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.xy[i](1));
 
-        if (!event_warpped_Bundle_.isInner[i])
+        if (!isInner[i])
           continue;
 
-        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta[i];
+        cv_earlier_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.t[i];
       }
 
       // 获取 later 时间表面
-      getWarpedEventImageSixDof(eg_vec6, event_warpped_Bundle_, true);
+      getWarpedEventImage(eg_vec6.head<3>(), eg_vec6.tail<3>(), event_warpped_Bundle_, isInner, true);
 
-      for (int i = event_warpped_Bundle_.size * (1 - timesurface_range);i < event_warpped_Bundle_.size; ++i)
+      for (int i = event_warpped_Bundle_.size() * (1 - timesurface_range); i < event_warpped_Bundle_.size(); ++i)
       {
-        int sampled_x = std::round(event_warpped_Bundle_.coord[i](0));
-        int sampled_y = std::round(event_warpped_Bundle_.coord[i](1));
+        int sampled_x = std::round(event_warpped_Bundle_.xy[i](0));
+        int sampled_y = std::round(event_warpped_Bundle_.xy[i](1));
 
-        if (!event_warpped_Bundle_.isInner[i])
+        if (!isInner[i])
           continue;
 
-        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.time_delta.back() - eventBundle_.time_delta[i];
+        cv_later_timesurface.at<double>(sampled_y + padding_, sampled_x + padding_) = eventBundle_.t.back() - eventBundle_.t[i];
       }
 
       // 高斯模糊
@@ -736,7 +593,7 @@ struct PEMESixDof
 
       // 采样
       std::vector<int> vec_sampled_idx;
-      int samples_count = std::min(params_.sample_count, eventBundle_.size);
+      int samples_count = std::min(params_.sample_count, eventBundle_.size());
       getSampledIndices(iwe, vec_sampled_idx, samples_count, 0.0, 1.0);
 
       // 构建 Ceres 问题
@@ -744,16 +601,16 @@ struct PEMESixDof
       // 将vec_sampled_idx打印至文件流中
       for (int sample_idx : vec_sampled_idx)
       {
-        double early_time = eventBundle_.time_delta[sample_idx];
-        double later_time = eventBundle_.time_delta[sample_idx] - eventBundle_.time_delta.back();
+        double early_time = eventBundle_.t[sample_idx];
+        double later_time = eventBundle_.t[sample_idx] - eventBundle_.t.back();
 
         ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<PEMESixDof, 1, 6>(
             new spatiotemporal_vo::PEMESixDof(eventBundle_.coord_3d[sample_idx],
-                                                            padding_,
-                                                            early_time, later_time,
-                                                            fx_, fy_, cx_, cy_,
-                                                            interpolator_early_ptr.get(),
-                                                            interpolator_later_ptr.get()));
+                                              padding_,
+                                              early_time, later_time,
+                                              fx_, fy_, cx_, cy_,
+                                              interpolator_early_ptr.get(),
+                                              interpolator_later_ptr.get()));
 
         problem.AddResidualBlock(cost_function, nullptr, &trans_rot_vec[0]);
       }
@@ -811,7 +668,7 @@ struct PEMESixDof
     return best_loss;
   }
 
-  RegistrationOutput<3> PEMEEstimator::runRotation(const EventPacket& events)
+  RegistrationOutput<3> PEMEEstimator::runRotation(const EventPacket &events)
   {
     RegistrationOutput<3> result;
 
@@ -824,17 +681,11 @@ struct PEMESixDof
     }
 
     // 初始化事件数据
-    eventBundle_.coord = events.xy;
-    eventBundle_.polarity = events.polarity;
-    eventBundle_.coord_3d = events.coord_3d;
-    eventBundle_.time_delta = events.t;
-    eventBundle_.size = events.size();
-    eventBundle_.first_tstamp = events.t.front();
-    eventBundle_.last_tstamp = events.t.back();
+    eventBundle_ = events;
 
     std::cout << '[' << count_ << "] " << "PEME: Processing "
-              << eventBundle_.size << " events, duration: "
-              << (eventBundle_.last_tstamp - eventBundle_.first_tstamp) << "s" << std::endl;
+              << eventBundle_.size() << " events, duration: "
+              << (eventBundle_.t_end - eventBundle_.t_start) << "s" << std::endl;
 
     // 运行优化
     result.stats.time_taken = omp_get_wtime();
@@ -852,7 +703,7 @@ struct PEMESixDof
     return result;
   }
 
-  RegistrationOutput<3> PEMEEstimator::runTranslation(const EventPacket& events)
+  RegistrationOutput<3> PEMEEstimator::runTranslation(const EventPacket &events)
   {
     RegistrationOutput<3> result;
 
@@ -865,17 +716,11 @@ struct PEMESixDof
     }
 
     // 初始化事件数据
-    eventBundle_.coord = events.xy;
-    eventBundle_.polarity = events.polarity;
-    eventBundle_.coord_3d = events.coord_3d;
-    eventBundle_.time_delta = events.t;
-    eventBundle_.size = events.size();
-    eventBundle_.first_tstamp = events.t.front();
-    eventBundle_.last_tstamp = events.t.back();
+    eventBundle_ = events;
 
     std::cout << '[' << count_ << "] " << "PEME: Processing "
-              << eventBundle_.size << " events, duration: "
-              << (eventBundle_.last_tstamp - eventBundle_.first_tstamp) << "s" << std::endl;
+              << eventBundle_.size() << " events, duration: "
+              << (eventBundle_.t_end - eventBundle_.t_start) << "s" << std::endl;
 
     // 运行优化
     result.stats.time_taken = omp_get_wtime();
@@ -893,7 +738,7 @@ struct PEMESixDof
     return result;
   }
 
-    RegistrationOutput<6> PEMEEstimator::runSixDof(const EventPacket& events)
+  RegistrationOutput<6> PEMEEstimator::runSixDof(const EventPacket &events)
   {
     RegistrationOutput<6> result;
 
@@ -906,17 +751,11 @@ struct PEMESixDof
     }
 
     // 初始化事件数据
-    eventBundle_.coord = events.xy;
-    eventBundle_.polarity = events.polarity;
-    eventBundle_.coord_3d = events.coord_3d;
-    eventBundle_.time_delta = events.t;
-    eventBundle_.size = events.size();
-    eventBundle_.first_tstamp = events.t.front();
-    eventBundle_.last_tstamp = events.t.back();
+    eventBundle_ = events;
 
     std::cout << '[' << count_ << "] " << "PEME: Processing "
-              << eventBundle_.size << " events, duration: "
-              << (eventBundle_.last_tstamp - eventBundle_.first_tstamp) << "s" << std::endl;
+              << eventBundle_.size() << " events, duration: "
+              << (eventBundle_.t_end - eventBundle_.t_start) << "s" << std::endl;
 
     // 运行优化
     result.stats.time_taken = omp_get_wtime();
