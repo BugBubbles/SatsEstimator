@@ -46,12 +46,33 @@ namespace spatiotemporal_vo
     return true;
   }
 
-  EventPacket DataLoader::getEventsInWindow(double t_start, double t_end, int event_count)
+  EventPacket DataLoader::getEventsInWindow(int event_count, bool use_depth)
   {
     events_buffer_.clear();
     std::string line;
 
-    if (t_start > t_end)
+    if (use_depth)
+    {
+      while (std::getline(all_events_, line) && events_buffer_.size() < event_count)
+      {
+        if (line.empty() || line[0] == '#' || line[0] == '%')
+          continue;
+
+        std::istringstream iss(line);
+        double t, x, y, d;
+        int p;
+
+        // 假设格式为: t x y p
+        if (iss >> t >> x >> y >> p >> d)
+        {
+          events_buffer_.t.push_back(t);
+          events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
+          events_buffer_.depth.push_back(d);
+          events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
+        }
+      }
+    }
+    else
     {
       while (std::getline(all_events_, line) && events_buffer_.size() < event_count)
       {
@@ -68,29 +89,6 @@ namespace spatiotemporal_vo
           events_buffer_.t.push_back(t);
           events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
           events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
-        }
-      }
-    }
-    else
-    {
-      while (std::getline(all_events_, line))
-      {
-        if (line.empty() || line[0] == '#' || line[0] == '%')
-          continue;
-        std::istringstream iss(line);
-        double t, x, y;
-        int p;
-
-        // 假设格式为: t x y p
-        if (iss >> t >> x >> y >> p)
-        {
-          events_buffer_.t.push_back(t);
-          events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
-          events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
-        }
-        if (t > t_end)
-        {
-          break;
         }
       }
     }
@@ -125,13 +123,13 @@ namespace spatiotemporal_vo
         }
         else
         {
-        if (iss >> t >> x >> y >> p)
-        {
-          events_buffer_.t.push_back(t);
-          events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
-          events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
+          if (iss >> t >> x >> y >> p)
+          {
+            events_buffer_.t.push_back(t);
+            events_buffer_.xy.push_back(Eigen::Vector2d(x, y));
+            events_buffer_.polarity.push_back(p > 0 ? 1 : -1);
+          }
         }
-      }
       }
       events_buffer_.set_timespan();
       return events_buffer_;
@@ -166,12 +164,13 @@ namespace spatiotemporal_vo
           }
           else
           {
-          if (iss >> t >> x >> y >> p)
-          {
-            packet.t.push_back(t);
-            packet.xy.push_back(Eigen::Vector2d(x, y));
-            packet.polarity.push_back(p > 0 ? 1 : -1);
-          }}
+            if (iss >> t >> x >> y >> p)
+            {
+              packet.t.push_back(t);
+              packet.xy.push_back(Eigen::Vector2d(x, y));
+              packet.polarity.push_back(p > 0 ? 1 : -1);
+            }
+          }
         }
         packet.set_timespan();
         // 计算初始包的状态量
@@ -186,7 +185,7 @@ namespace spatiotemporal_vo
         {
           // 计算均值和方差
           double num_scores = static_cast<double>(score_.size());
-          double mean = std::accumulate(score_.begin(), score_.end(), 0.0) /num_scores;
+          double mean = std::accumulate(score_.begin(), score_.end(), 0.0) / num_scores;
           double std = std::sqrt(std::accumulate(score_var_.begin(), score_var_.end(), 0.0) / num_scores - mean * mean);
           // 计算当前自由度下的t分布置信区间
           double t_threshold = t_ppf_[std::min(score_.size() - 2, t_ppf_.size() - 1)];
@@ -291,7 +290,7 @@ namespace spatiotemporal_vo
     else if (method == "middle")
       t_ref = 0.5 * (packet.t.front() + packet.t.back());
     else if (method == "mean")
-     t_ref = std::accumulate(packet.t.begin(), packet.t.end(), 0.0) / packet.size();
+      t_ref = std::accumulate(packet.t.begin(), packet.t.end(), 0.0) / packet.size();
     for (auto &t : packet.t)
     {
       t -= t_ref;

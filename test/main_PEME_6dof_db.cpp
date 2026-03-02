@@ -46,7 +46,7 @@ int main(int argc, char **argv)
   double t_start = 0, overlap, overlap_past = 0, time_taken = 0, time_start;
   EventPacket events, past_events_backup;
   // 加载初始事件片段
-  EventPacket past_events = data_loader.getEventsInWindow(t_start, t_start - 1, config.data.unit_count);
+  EventPacket past_events = data_loader.getEventsInWindow(config.data.unit_count, true);
 
   data_loader.undistortEvents(past_events, config.camera);
 
@@ -56,7 +56,7 @@ int main(int argc, char **argv)
 
   while (data_loader.hasNext())
   {
-    events = data_loader.getEventsInWindow(t_start, t_start - 1, config.data.unit_count);
+    events = data_loader.getEventsInWindow(config.data.unit_count, true);
 
     data_loader.undistortEvents(events, config.camera);
 

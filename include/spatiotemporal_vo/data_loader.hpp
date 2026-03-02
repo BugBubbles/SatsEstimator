@@ -27,13 +27,12 @@ namespace spatiotemporal_vo
 
     /**
      * @brief 获取指定时间窗口，或指定个数的事件
-     * @param t_start 起始时间
-     * @param t_end 结束时间
      * @param event_count 事件个数
+     * @param use_depth 是否使用深度信息（假设事件文件中包含深度数据）
      * @param select_num 挑选的事件个数
      * @return 事件数据包
      */
-    EventPacket getEventsInWindow(double t_start, double t_end, int event_count);
+    EventPacket getEventsInWindow(int event_count, bool use_depth = false);
     /**
      * @brief 自适应地获取事件数据包，保证每个包内的时间跨度不少于 min_delta_time 秒，且事件数在[min_count, max_count]范围内
      * @param min_delta_time 最小时间跨度
