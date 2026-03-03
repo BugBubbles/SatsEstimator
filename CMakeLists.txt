@@ -6,8 +6,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 add_definitions(-DEIGEN_MAX_ALIGN_BYTES=32)
 
 # --- DEBUG模式 ---
-option(DEBUG "Enable debug mode" OFF)
-if(DEBUG)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DDEBUG)
 endif()
 # --- 是否构建测试 ---

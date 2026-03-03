@@ -51,6 +51,9 @@ namespace spatiotemporal_vo
       // 创建翘曲事件图像
       int pad_width = width_ + 2 * padding_;
       int pad_height = height_ + 2 * padding_;
+      regular_loss_ = 0;
+      regular_gradient_.setZero();
+      regular_hessian_.setZero();
 #ifdef SEPARATE_POLARITY
       warped_image_pos_.setZero();
       warped_image_neg_.setZero();
@@ -106,21 +109,28 @@ namespace spatiotemporal_vo
         warped_y = points_T(1) / points_T(2) * fy_ + cy_ + padding_;
 
         // 退化正则项损失值
-        double grad = dt / (std::fabs(points_T(2)) + 1e-6);
-        double res = std::log(point_(2) / (std::fabs(points_T(2)) + 1e-6));
-        double huber_val, huber_grad, huber_sec_grad;
+        double grad, res, huber_val, huber_grad, huber_sec_grad;
 
-        huber_loss(res, huber_val, huber_grad, huber_sec_grad);
-        regular_loss_ += huber_val;
-        regular_gradient_2_ += huber_grad * grad * (points_T(2) > 0 ? 1 : -1);
-        regular_gradient_3_ += -huber_grad * grad * (points_T(2) > 0 ? 1 : -1) * point_(1);
-        regular_gradient_4_ += huber_grad * grad * (points_T(2) > 0 ? 1 : -1) * point_(0);
-        regular_hessian_2_2_ += (huber_grad + huber_sec_grad) * grad * grad;
-        regular_hessian_3_3_ += (huber_grad + huber_sec_grad) * grad * grad * point_(1) * point_(1);
-        regular_hessian_4_4_ += (huber_grad + huber_sec_grad) * grad * grad * point_(0) * point_(0);
-        regular_hessian_2_3_ += -(huber_grad + huber_sec_grad) * grad * grad * point_(1);
-        regular_hessian_2_4_ += (huber_grad + huber_sec_grad) * grad * grad * point_(0);
-        regular_hessian_3_4_ += -(huber_grad + huber_sec_grad) * grad * grad * point_(0) * point_(1);
+        // res = std::log(std::fabs(point_(0) + 1e-6) / (std::fabs(points_T(0)) + 1e-6));
+        // grad = dt / (std::fabs(points_T(0)) + 1e-6);
+        // huber_loss(res, huber_val, huber_grad, huber_sec_grad);
+        // regular_loss_ += huber_val;
+        // regular_gradient_(0) += huber_grad * grad * (points_T(0) > 0 ? 1 : -1);
+        // regular_hessian_(0, 0) += (huber_grad + huber_sec_grad) * grad * grad;
+
+        // res = std::log(std::fabs(point_(1) + 1e-6) / (std::fabs(points_T(1)) + 1e-6));
+        // grad = dt / (std::fabs(points_T(1)) + 1e-6);
+        // huber_loss(res, huber_val, huber_grad, huber_sec_grad);
+        // regular_loss_ += huber_val;
+        // regular_gradient_(1) += huber_grad * grad * (points_T(1) > 0 ? 1 : -1);
+        // regular_hessian_(1, 1) += (huber_grad + huber_sec_grad) * grad * grad;
+
+        // res = std::log(std::fabs(point_(2) + 1e-6) / (std::fabs(points_T(2)) + 1e-6));
+        // grad = dt / (std::fabs(points_T(2)) + 1e-6);
+        // huber_loss(res, huber_val, huber_grad, huber_sec_grad);
+        // regular_loss_ += huber_val;
+        // regular_gradient_(2) += huber_grad * grad * (points_T(2) > 0 ? 1 : -1);
+        // regular_hessian_(2, 2) += (huber_grad + huber_sec_grad) * grad * grad;
 
         // 使用双线性插值将当前事件翘曲至图像
         int x = static_cast<int>(floor(warped_x));
@@ -284,6 +294,29 @@ namespace spatiotemporal_vo
           hessian(j, i) = hessian(i, j); // 对称矩阵
         }
       }
+#ifdef DEBUG
+// 将warped_image_保存为图像，便于调试
+#ifdef SEPARATE_POLARITY
+      cv::Mat debug_img_pos(pad_width, pad_height, CV_64F, warped_image_pos_.data());
+      cv::Mat debug_img_neg(pad_width, pad_height, CV_64F, warped_image_neg_.data());
+      debug_img_pos /= warped_image_pos_.maxCoeff();
+      debug_img_neg /= warped_image_pos_.maxCoeff();
+      cv::imwrite("debug_warped_pos.png", debug_img_pos * 255);
+      cv::imwrite("debug_warped_neg.png", debug_img_neg * 255);
+#else
+      cv::Mat debug_img(pad_width, pad_height, CV_64F, warped_image_.data());
+      debug_img /= warped_image_.maxCoeff();
+      cv::rotate(debug_img, debug_img, cv::ROTATE_90_CLOCKWISE); 
+      cv::imwrite("debug_warped.png", debug_img * 255);
+#endif
+#endif
+      regular_loss_ = parameters.head<3>().norm() + 1e-6;
+      regular_gradient_.head<3>() = parameters.head<3>() / regular_loss_;
+      regular_hessian_ = -regular_gradient_ * regular_gradient_.transpose();
+      regular_hessian_(0, 0) += 1.0;
+      regular_hessian_(1, 1) += 1.0;
+      regular_hessian_(2, 2) += 1.0;
+      regular_gradient_ /= regular_loss_;
     }
     void MainOptimize(const Config &config) override
     {
@@ -313,32 +346,17 @@ namespace spatiotemporal_vo
 #ifdef DEBUG
         std::cout << "[DEBUG] loss = " << loss << std::endl;
         std::cout << "[DEBUG] gradient = " << gradient.transpose() << std::endl;
-        std::cout << "[DEBUG] hessian :" << hessian << std::endl;
-        Eigen::SelfAdjointEigenSolver<Mat6> eigensolver(hessian);
-        std::cout << "[DEBUG] Hessian eigenvalues: " << eigensolver.eigenvalues().transpose() << std::endl;
+        std::cout << "[DEBUG] hessian :\n"
+                  << hessian << std::endl;
         std::cout << "[DEBUG] <<Regular>> loss = " << regularization * regular_loss_ / n_points_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> gradien = " << regularization * regular_gradient_2_ << regularization * regular_gradient_3_ << regularization * regular_gradient_4_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian_2_2 = " << regularization * regular_hessian_2_2_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian_3_3 = " << regularization * regular_hessian_3_3_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian_4_4 = " << regularization * regular_hessian_4_4_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian_2_3 = " << regularization * regular_hessian_2_3_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian_2_4 = " << regularization * regular_hessian_2_4_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian_3_4 = " << regularization * regular_hessian_3_4_ << std::endl;
+        std::cout << "[DEBUG] <<Regular>> gradien = " << regularization * regular_gradient_.transpose() << std::endl;
+        std::cout << "[DEBUG] <<Regular>> hessian :\n"
+                  << regularization * regular_hessian_ << std::endl;
 #endif
 
-        loss += regularization * regular_loss_ / n_points_;
-        gradient(2) += regularization * regular_gradient_2_;
-        gradient(3) += regularization * regular_gradient_3_;
-        gradient(4) += regularization * regular_gradient_4_;
-        hessian(2, 2) += regularization * regular_hessian_2_2_;
-        hessian(3, 3) += regularization * regular_hessian_3_3_;
-        hessian(4, 4) += regularization * regular_hessian_4_4_;
-        hessian(2, 3) += regularization * regular_hessian_2_3_;
-        hessian(3, 2) += regularization * regular_hessian_2_3_;
-        hessian(2, 4) += regularization * regular_hessian_2_4_;
-        hessian(4, 2) += regularization * regular_hessian_2_4_;
-        hessian(3, 4) += regularization * regular_hessian_3_4_;
-        hessian(4, 3) += regularization * regular_hessian_3_4_;
+        loss += regularization * regular_loss_;
+        gradient += regularization * regular_gradient_;
+        hessian += regularization * regular_hessian_;
 
         // 求解线性系统，LM算法
         step = hessian.ldlt().solve(-gradient) * lr;
@@ -374,8 +392,8 @@ namespace spatiotemporal_vo
     }
 
   private:
-    double regular_loss_, regular_gradient_2_, regular_gradient_3_, regular_gradient_4_;
-    double regular_hessian_2_2_, regular_hessian_3_3_, regular_hessian_4_4_;
-    double regular_hessian_2_3_, regular_hessian_2_4_, regular_hessian_3_4_;
+    double regular_loss_;
+    Vec6 regular_gradient_;
+    Mat6 regular_hessian_;
   };
 };

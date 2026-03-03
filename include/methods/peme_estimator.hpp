@@ -30,7 +30,7 @@ namespace spatiotemporal_vo
       int ceres_iter_num = 10;           // Ceres 内部迭代次数
       int ceres_iter_thread = 8;         // Ceres 线程数
       int gaussian_size = 5;             // 高斯模糊核大小
-      double gaussian_sigma = 1.0;       // 高斯模糊 sigma
+      double gaussian_sigma = 0.5;       // 高斯模糊 sigma
       double default_value_factor = 1.0; // 默认值因子
       double overlap_init = 0.5;
     };

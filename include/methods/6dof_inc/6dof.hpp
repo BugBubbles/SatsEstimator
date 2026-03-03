@@ -16,7 +16,7 @@ namespace spatiotemporal_vo
     {
       double X_Z = point(0) / point(2);
       double Y_Z = point(1) / point(2);
-      if (opmize_angular_)
+      if (optimize_angular_)
       {
         grad_warp << 0, 0, 0, fx_ * X_Z * Y_Z, -fx_ * (1 + X_Z * X_Z), fx_ * Y_Z,
             0, 0, 0, fy_ * (1 + Y_Z * Y_Z), -fy_ * X_Z * Y_Z, -fy_ * X_Z;
@@ -316,7 +316,7 @@ namespace spatiotemporal_vo
       // double beta1_T = beta1, beta2_T = beta2;
       for (int iter = 0; iter < max_iterations; ++iter)
       {
-        opmize_angular_ = !opmize_angular_;
+        optimize_angular_ = !optimize_angular_;
         compute_gradient(est_params_, loss, gradient, hessian);
 
         // 添加阻尼项以确保Hessian矩阵是正定的
@@ -352,7 +352,7 @@ namespace spatiotemporal_vo
         hessian(4, 3) += regularization * regular_hessian_3_4_;
 
         // 求解线性系统，LM算法
-        if (opmize_angular_)
+        if (optimize_angular_)
         {
           hess_inc = hessian.block<3, 3>(3, 3);
           grad_inc = gradient.segment<3>(3);
@@ -400,6 +400,6 @@ namespace spatiotemporal_vo
     double regular_loss_, regular_gradient_2_, regular_gradient_3_, regular_gradient_4_;
     double regular_hessian_2_2_, regular_hessian_3_3_, regular_hessian_4_4_;
     double regular_hessian_2_3_, regular_hessian_2_4_, regular_hessian_3_4_;
-    bool opmize_angular_ = true;
+    bool optimize_angular_ = true;
   };
 };

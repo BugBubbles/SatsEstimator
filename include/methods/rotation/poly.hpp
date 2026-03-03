@@ -13,11 +13,9 @@ namespace spatiotemporal_vo
     std::string getMethodName() const override { return "PolyRotation"; }
     void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
     {
-      // Ours
-      loss = (0.9416 * iwe.array() + (iwe.array() + 0.1).log() + std::log(10)).sum() / iwe.sum();
-      grad = 0.9416 + 1 / (iwe.array() + 0.1);
+      loss = ((iwe.array() + 0.1).log() + std::log(10)).sum() / iwe.sum();
+      grad = 1 / (iwe.array() + 0.1);
       hess = -1 / (iwe.array() + 0.1).square();
     }
-
   };
 };
