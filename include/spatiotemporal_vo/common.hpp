@@ -4,10 +4,7 @@
 #include <Eigen/Geometry>
 #include <opencv2/opencv.hpp>
 #include <omp.h>
-#include <memory>
-#include <numeric>
 #include <vector>
-#include <fstream>
 
 namespace spatiotemporal_vo
 {

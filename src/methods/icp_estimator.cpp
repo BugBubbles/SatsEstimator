@@ -4,11 +4,9 @@
 #include <pcl/point_types.h>
 #include <pcl/common/transforms.h>
 #include <ceres/ceres.h>
-#include <iostream>
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <fstream>
 
 namespace spatiotemporal_vo
 {

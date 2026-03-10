@@ -3,7 +3,6 @@
 #include "spatiotemporal_vo/common.hpp"
 #include "spatiotemporal_vo/config.hpp"
 #include <vector>
-#include <utility>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 

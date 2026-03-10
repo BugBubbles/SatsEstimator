@@ -3,6 +3,7 @@ project(event_camera_vo_cpp)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mavx")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_definitions(-DEIGEN_MAX_ALIGN_BYTES=32)
 
 # --- DEBUG模式 ---

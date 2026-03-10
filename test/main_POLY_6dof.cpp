@@ -1,5 +1,4 @@
 #include <iostream>
-#include <filesystem>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
 #include "methods/6dof/poly.hpp"

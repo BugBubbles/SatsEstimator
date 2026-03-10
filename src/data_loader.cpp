@@ -3,7 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <unordered_set>
-#include <valarray>
+#include <numeric>
 
 namespace spatiotemporal_vo
 {
