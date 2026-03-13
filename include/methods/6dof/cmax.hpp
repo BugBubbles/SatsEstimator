@@ -11,7 +11,7 @@ namespace spatiotemporal_vo
     using SixDofEstimator::SixDofEstimator; // 继承所有基类构造函数
   protected:
     std::string getMethodName() const override { return "CMaxSixDof"; }
-    void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
+    void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const override
     {
       // CMax
       loss = -(iwe.array() - iwe.mean()).square().mean();

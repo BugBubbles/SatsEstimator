@@ -14,7 +14,7 @@ namespace spatiotemporal_vo
   public:
     using MotionEstimator<3>::MotionEstimator; // 继承所有基类构造函数
   protected:
-    void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Mat3 &hess_warp) const
+    void warp_gradient(const Vec3 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 3> &grad_warp, Mat3 &hess_warp) const override
     {
       double X_Z = point(0) / point(2);
       double Y_Z = point(1) / point(2);

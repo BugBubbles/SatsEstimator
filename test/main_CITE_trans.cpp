@@ -1,14 +1,14 @@
 #include <iostream>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
-#include "methods/translation/poly.hpp"
+#include "methods/translation/cite.hpp"
 #include "spatiotemporal_vo/logger.hpp"
 
 using namespace spatiotemporal_vo;
 
 int main(int argc, char **argv)
 {
-  std::cout << "=== Poly Visual Odometry (C++) ===" << std::endl;
+  std::cout << "=== CITE Visual Odometry (C++) ===" << std::endl;
 
   // 1. 加载配置
   std::string config_file = (argc > 1) ? argv[1] : "../configs/default.yaml";
@@ -24,7 +24,7 @@ int main(int argc, char **argv)
     return -1;
   }
   // 3. 初始化 PEME 估计器
-  PolyTranslation estimator(
+  CITETranslation estimator(
       config.camera.fx,
       config.camera.fy,
       config.camera.cx,
@@ -33,7 +33,7 @@ int main(int argc, char **argv)
       config.camera.height
       );
   // 4. 初始化日志记录器
-  ResultLogger logger(config.paths.output_root, "poly", config.paths.suffix);
+  ResultLogger logger(config.paths.output_root, "CITE", config.paths.suffix);
 
   // 5. 主循环
   int frame_count = 0;

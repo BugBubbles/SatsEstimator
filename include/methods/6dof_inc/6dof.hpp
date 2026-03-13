@@ -12,7 +12,7 @@ namespace spatiotemporal_vo
   protected:
     using Vec6 = Eigen::Matrix<double, 6, 1>;
     using Mat6 = Eigen::Matrix<double, 6, 6>;
-    void warp_gradient(const Vec6 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 6> &grad_warp, Mat6 &hess_warp) const
+    void warp_gradient(const Vec6 &parameters, const Vec3 &point, double dt, Eigen::Matrix<double, 2, 6> &grad_warp, Mat6 &hess_warp) const override
     {
       double X_Z = point(0) / point(2);
       double Y_Z = point(1) / point(2);

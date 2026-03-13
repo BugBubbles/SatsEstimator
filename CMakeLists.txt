@@ -11,7 +11,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DDEBUG)
 endif()
 # --- 是否构建测试 ---
-option(BUILD_TESTS "Build [cmax,stppp,poly] test cases" ON)
+option(BUILD_TESTS "Build [cmax,stppp,cite] test cases" ON)
 # --- 是否将极性分开处理 ---
 option(SEPARATE_POLARITY "Process positive and negative events separately" OFF)
 if(SEPARATE_POLARITY)

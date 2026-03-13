@@ -44,7 +44,7 @@ namespace spatiotemporal_vo
     using RotationEstimator::RotationEstimator; // 继承所有基类构造函数
   protected:
     std::string getMethodName() const override { return "STPPPRotation"; }
-    void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const
+    void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const override
     {
       // STPPP
       auto stppp_loss = [](double x, double r = 0.1, double q = 0.39)
