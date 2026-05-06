@@ -348,10 +348,24 @@ namespace spatiotemporal_vo
         std::cout << "[DEBUG] gradient = " << gradient.transpose() << std::endl;
         std::cout << "[DEBUG] hessian :\n"
                   << hessian << std::endl;
-        std::cout << "[DEBUG] <<Regular>> loss = " << regularization * regular_loss_ / n_points_ << std::endl;
-        std::cout << "[DEBUG] <<Regular>> gradien = " << regularization * regular_gradient_.transpose() << std::endl;
-        std::cout << "[DEBUG] <<Regular>> hessian :\n"
-                  << regularization * regular_hessian_ << std::endl;
+        // std::cout << "[DEBUG] <<Regular>> loss = " << regularization *
+        // regular_loss_ / n_points_ << std::endl; std::cout << "[DEBUG]
+        // <<Regular>> gradien = " << regularization *
+        // regular_gradient_.transpose() << std::endl; std::cout << "[DEBUG]
+        // <<Regular>> hessian :\n"
+        //           << regularization * regular_hessian_ << std::endl;
+        double eps = 1e-6;
+        Vec6 normalized_gradient = gradient.normalized();
+        Vec6 params_plus = est_params_ + eps * normalized_gradient;
+        Vec6 params_minus = est_params_ - eps * normalized_gradient;
+        double loss_plus, loss_minus;
+        double L_plus, L_minus;
+        Vec6 temp_grad;
+        Mat6 temp_hess;
+        compute_gradient(params_plus, loss_plus, temp_grad, temp_hess);
+        compute_gradient(params_minus, loss_minus, temp_grad, temp_hess);
+        double finite_diff = (loss_plus - loss_minus) / (2 * eps);
+        std::cout << "[DEBUG] Finite Difference = " << finite_diff << std::endl;
 #endif
 
         loss += regularization * regular_loss_;
@@ -360,12 +374,16 @@ namespace spatiotemporal_vo
 
         // 求解线性系统，LM算法
         step = hessian.ldlt().solve(-gradient) * lr;
+        // 一阶梯度下降法
+        // step = -gradient * lr;
+        std::cout << "[DEBUG] Directional Derivative = " << normalized_gradient.dot(step)
+                  << std::endl;
         // Adam优化器更新
         // m = beta1 * m + inv_beta1 * gradient;
         // v = beta2 * v + inv_beta2 * gradient.array().square().matrix();
         // beta1_T *= beta1;
         // beta2_T *= beta2;
-        // step = lr * m.array() / (v.array().sqrt() + epsilon) * (std::sqrt(1 - beta2_T) / (1 - beta1_T));
+        // step = -lr * m.array() / (v.array().sqrt() + epsilon) * (std::sqrt(1 - beta2_T) / (1 - beta1_T));
         est_params_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)
