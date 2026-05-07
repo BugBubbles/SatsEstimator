@@ -19,13 +19,13 @@ class RelposeEstimator {
   struct Params {
     double tol_fun = 1e-6;   // 函数值收敛阈值
     double tol_x = 1e-6;     // 变量收敛阈值
-    int max_iter = 100;      // 最大迭代次数
-    int max_fun_evals = 500; // 最大函数评估次数
+    int max_iter = 1e6;      // 最大迭代次数
+    int max_fun_evals = 1e6; // 最大函数评估次数
     double lr = 1e-3;        // Adam 步长
     double beta1 = 0.9;      // Adam beta1
     double beta2 = 0.999;    // Adam beta2
-    double epsilon = 1e-8;   // Adam epsilon
-    int epoch_size = 10;     // 平滑窗口大小
+    double epsilon = 1e-9;   // Adam epsilon
+    int epoch_size = 3;     // 平滑窗口大小
   };
 
 public:

@@ -40,10 +40,14 @@ void RelposeEstimator::lineDetection(const EventPacket &events) {
   // 归一化到0-255
   cv::Mat accum_norm;
   cv::normalize(accum, accum_norm, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+  cv::GaussianBlur(accum_norm, accum_norm, cv::Size(3, 3), 0);
+  // 计算Canny边缘图
+  cv::Mat edges;
+  cv::Canny(accum_norm, edges, 50, 150, 3); // 参数可调
 
   // HoughLinesP
   std::vector<cv::Vec4i> linesP;
-  cv::HoughLinesP(accum_norm, linesP, 1, CV_PI / 180, 50, 50, 10); // 参数可调
+  cv::HoughLinesP(edges, linesP, 1, CV_PI / 60, 50, 30, 5); // 参数可调
 
   for (size_t i = 0; i < linesP.size(); ++i) {
     Line l;
@@ -53,6 +57,17 @@ void RelposeEstimator::lineDetection(const EventPacket &events) {
     l.y2 = linesP[i][3] - padding_;
     lines_.push_back(l);
   }
+
+// #ifdef DEBUG
+//   // 可视化检测结果
+//   cv::Mat color_accum;
+//   cv::cvtColor(edges, color_accum, cv::COLOR_GRAY2BGR);
+//   for (size_t i = 0; i < linesP.size(); ++i) {
+//     cv::line(color_accum, cv::Point(linesP[i][0], linesP[i][1]),
+//              cv::Point(linesP[i][2], linesP[i][3]), cv::Scalar(0, 0, 255), 2);
+//   }
+//   cv::imwrite("HoughLinesP.png", color_accum);
+// #endif
 }
 void RelposeEstimator::eventClustering(const EventPacket &events,
                                        double line_threshold) {
@@ -81,8 +96,6 @@ void RelposeEstimator::eventClustering(const EventPacket &events,
     // 预计算线段长度平方，用于投影参数
     double seg_len_sq = dx * dx + dy * dy;
 
-    std::vector<int> &cluster = clusters_[i];
-
     for (size_t j = 0; j < num_events; ++j) {
       double x = events.xy[j].x();
       double y = events.xy[j].y();
@@ -99,7 +112,7 @@ void RelposeEstimator::eventClustering(const EventPacket &events,
         continue;
 
       // 通过双重检查，加入聚类
-      cluster.push_back(static_cast<int>(j));
+      clusters_[i].push_back(static_cast<int>(j));
     }
   }
 }
@@ -226,7 +239,7 @@ RegistrationOutput<3> RelposeEstimator::runRotation(const EventPacket &events) {
 
   // 提取直线
   lineDetection(events);
-  std::cout << "Detected " << lines_.size() << " lines_." << std::endl;
+  std::cout << "Detected " << lines_.size() << " lines." << std::endl;
   // 聚类事件
   eventClustering(events, 5.0);
   // 估计法线流
@@ -300,18 +313,17 @@ double RelposeEstimator::optimizeRotation() {
   }
 
   // ---------- 步骤2：调用 Adam 优化器 ----------
-  Vector3d x0 = est_vec3_; // 使用上一次估计作为初值（首次为零）
-
+  if (std::isnan(est_vec3_.norm()) || std::isinf(est_vec3_.norm())) {
+    est_vec3_.setZero(); // 避免数值问题导致的发散
+  }
   double loss =
-      adam_cop_flow(event_groups, x0,
+      adam_cop_flow(event_groups, est_vec3_,
                     301, // 方法：精确解析梯度（obj_grad_cop_flow）
                     1.0, // scale_lambda（可根据需要调整）
                     1e-6, 1.0, params_.tol_fun, params_.tol_x, params_.max_iter,
                     params_.max_fun_evals, params_.lr, params_.beta1,
                     params_.beta2, params_.epsilon, params_.epoch_size);
 
-  // 更新估计结果
-  est_vec3_ = x0;
   return loss;
 }
 } // namespace spatiotemporal_vo
