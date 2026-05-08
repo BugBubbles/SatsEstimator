@@ -33,7 +33,7 @@ int main(int argc, char **argv)
       config.camera.height
       );
   // 4. 初始化日志记录器
-  ResultLogger logger(config.paths.output_root, "CITE_inc", config.paths.suffix);
+  ResultLogger logger(config.paths.output_root, "cite_inc", config.paths.suffix);
 
   // 5. 主循环
   int frame_count = 0;
