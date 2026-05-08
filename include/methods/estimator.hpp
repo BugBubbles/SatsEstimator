@@ -218,8 +218,8 @@ namespace spatiotemporal_vo
         // hessian.diagonal().array() += (lambda * hessian.diagonal().mean());
 
         // 求解线性系统
-        // step = hessian.ldlt().solve(-gradient) * lr;
-        step = -gradient/static_cast<double>(config.data.event_count) * lr;
+        step = hessian.ldlt().solve(-gradient) * lr;
+        // step = -gradient/static_cast<double>(config.data.event_count) * lr;
         est_params_ += step;
         // 检查收敛性
         if (step.norm() < tolerance || std::abs(prev_loss - loss) < tolerance)

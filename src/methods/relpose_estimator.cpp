@@ -47,7 +47,7 @@ void RelposeEstimator::lineDetection(const EventPacket &events) {
 
   // HoughLinesP
   std::vector<cv::Vec4i> linesP;
-  cv::HoughLinesP(edges, linesP, 1, CV_PI / 60, 50, 30, 5); // 参数可调
+  cv::HoughLinesP(edges, linesP, 1, CV_PI / 60, 30, 30, 5); // 参数可调
 
   for (size_t i = 0; i < linesP.size(); ++i) {
     Line l;
@@ -58,16 +58,17 @@ void RelposeEstimator::lineDetection(const EventPacket &events) {
     lines_.push_back(l);
   }
 
-// #ifdef DEBUG
-//   // 可视化检测结果
-//   cv::Mat color_accum;
-//   cv::cvtColor(edges, color_accum, cv::COLOR_GRAY2BGR);
-//   for (size_t i = 0; i < linesP.size(); ++i) {
-//     cv::line(color_accum, cv::Point(linesP[i][0], linesP[i][1]),
-//              cv::Point(linesP[i][2], linesP[i][3]), cv::Scalar(0, 0, 255), 2);
-//   }
-//   cv::imwrite("HoughLinesP.png", color_accum);
-// #endif
+  // #ifdef DEBUG
+  //   // 可视化检测结果
+  //   cv::Mat color_accum;
+  //   cv::cvtColor(edges, color_accum, cv::COLOR_GRAY2BGR);
+  //   for (size_t i = 0; i < linesP.size(); ++i) {
+  //     cv::line(color_accum, cv::Point(linesP[i][0], linesP[i][1]),
+  //              cv::Point(linesP[i][2], linesP[i][3]), cv::Scalar(0, 0, 255),
+  //              2);
+  //   }
+  //   cv::imwrite("HoughLinesP.png", color_accum);
+  // #endif
 }
 void RelposeEstimator::eventClustering(const EventPacket &events,
                                        double line_threshold) {
@@ -261,69 +262,357 @@ RegistrationOutput<3> RelposeEstimator::runRotation(const EventPacket &events) {
   return result;
 }
 
-double RelposeEstimator::optimizeRotation() {
-  // 无聚类数据或原始事件时直接返回
-  if (clusters_.empty() || last_events_.empty()) {
-    return 0.0;
-  }
+// double RelposeEstimator::optimizeRotation() {
+//   if (clusters_.empty() || last_events_.empty()) {
+//     return 0.0;
+//   }
 
-  // ---------- 步骤1：根据聚类索引构建 vector<vector<Event>> ----------
+//   std::vector<std::vector<Event>> event_groups;
+//   event_groups.reserve(clusters_.size());
+
+//   for (size_t i = 0; i < clusters_.size(); ++i) {
+//     const auto &indices = clusters_[i];
+//     if (indices.size() < 8)
+//       continue; // 事件数太少，忽略该直线
+
+//     std::vector<Event> group;
+//     group.reserve(indices.size());
+
+//     for (int idx : indices) {
+//       // ---- bearing 向量（步骤 1）----
+//       double x = last_events_.xy[idx].x();
+//       double y = last_events_.xy[idx].y();
+//       double ux = (x - cx_) / fx_;
+//       double uy = (y - cy_) / fy_;
+//       Vec3 bearing(ux, uy, 1.0);
+//       bearing.normalize();
+
+//       // ---- 平面法向量计算（步骤 2+3）----
+//       Vec2 nf = normal_flows_[idx];
+//       if (nf.squaredNorm() < 1e-12) // 法向流太小，无法计算有效法向量
+//         continue;
+
+//       Vec3 h(-nf.y(), nf.x(), 0.0); // 线方向（步骤 2）
+//       Vec3 n = bearing.cross(h);    // 叉积（步骤 3）
+//       double n_norm = n.norm();
+//       if (n_norm < 1e-12) // 叉积退化
+//         continue;
+//       n.normalize();
+
+//       // ---- 构造 Event（不含旋转补偿，角速度未知）----
+//       Event ev;
+//       ev.t = last_events_.t[idx];
+//       ev.img = last_events_.xy[idx];
+//       ev.bearing_vec = bearing; // 保留轴承向量（可能另有用处）
+//       ev.plane_nml = n;         // 相机坐标系下的平面法线
+//       group.push_back(ev);
+//     }
+
+//     if (!group.empty())
+//       event_groups.push_back(group);
+//   }
+
+//   if (event_groups.empty())
+//     return 0.0;
+
+//   // 数值保护：防止角速度初值异常
+//   if (std::isnan(est_vec3_.norm()) || std::isinf(est_vec3_.norm()))
+//     est_vec3_.setZero();
+
+//   double loss = adam_cop_flow(
+//       event_groups, est_vec3_, 301, 1.0, 1e-6, 1.0, params_.tol_fun,
+//       params_.tol_x, params_.max_iter, params_.max_fun_evals, params_.lr,
+//       params_.beta1, params_.beta2, params_.epsilon, params_.epoch_size);
+
+//   return loss;
+// }
+double RelposeEstimator::optimizeRotation() {
+  // 0. 构建事件组（每条直线一个组），与之前相同
+  if (clusters_.empty() || last_events_.empty())
+    return 0.0;
+
   std::vector<std::vector<Event>> event_groups;
   event_groups.reserve(clusters_.size());
 
   for (size_t i = 0; i < clusters_.size(); ++i) {
     const auto &indices = clusters_[i];
     if (indices.empty())
-      continue; // 跳过没有事件的直线
+      continue;
 
     std::vector<Event> group;
     group.reserve(indices.size());
     for (int idx : indices) {
-      Event ev;
-      ev.t = last_events_.t[idx];
-      ev.img = last_events_.xy[idx];
-
-      // 计算 bearing_vec：像素反投影方向（单位向量）
+      // bearing 向量
       double x = last_events_.xy[idx].x();
       double y = last_events_.xy[idx].y();
       double ux = (x - cx_) / fx_;
       double uy = (y - cy_) / fy_;
       Eigen::Vector3d bearing(ux, uy, 1.0);
       bearing.normalize();
-      ev.bearing_vec = bearing;
 
-      // 计算 plane_nml：由法线流构造时空平面法线
-      // 法线流 (vx, vy) = -A/C, -B/C，平面法线正比于 (-vx, -vy, 1)
+      // 平面法向量（从法向流计算）
       Vec2 nf = normal_flows_[idx];
-      if (nf.x() == 0.0 && nf.y() == 0.0) {
-        // 法线流为零时用默认值，避免退化（对应纯垂直于图像平面的平面）
-        ev.plane_nml = Eigen::Vector3d(0, 0, 1);
-      } else {
-        Eigen::Vector3d pn(-nf.x(), -nf.y(), 1.0);
-        pn.normalize();
-        ev.plane_nml = pn;
-      }
+      if (nf.squaredNorm() < 1e-12)
+        continue;
+      Eigen::Vector3d h(-nf.y(), nf.x(), 0.0);
+      Eigen::Vector3d n = bearing.cross(h);
+      double n_norm = n.norm();
+      if (n_norm < 1e-12)
+        continue;
+      n.normalize();
+
+      Event ev;
+      ev.t = last_events_.t[idx];
+      ev.img = last_events_.xy[idx];
+      ev.bearing_vec = bearing;
+      ev.plane_nml = n;
       group.push_back(ev);
     }
-    event_groups.push_back(group);
+    if (!group.empty())
+      event_groups.push_back(group);
   }
 
-  if (event_groups.empty()) {
+  if (event_groups.empty())
     return 0.0;
+
+  // 1. GC‑RANSAC 参数
+  const int max_iter = 1000;
+  const double angle_thresh_deg = 0.2; // 角度阈值（度）
+  const double sin_thresh =
+      std::sin(angle_thresh_deg * M_PI / 180.0); // ≈0.00349
+  const int sample_per_line = 8;                 // 每条线最少采样事件数
+  const int inner_refine_iters = 20;             // 局部精化迭代次数
+  const double confidence = 0.99;
+
+  // 将所有事件展开为全局索引（用于内点标记）
+  const int total_events = [&]() {
+    int sum = 0;
+    for (auto &g : event_groups)
+      sum += g.size();
+    return sum;
+  }();
+  std::vector<int> group_offset(event_groups.size(), 0);
+  int offset = 0;
+  for (size_t i = 0; i < event_groups.size(); ++i) {
+    group_offset[i] = offset;
+    offset += event_groups[i].size();
   }
 
-  // ---------- 步骤2：调用 Adam 优化器 ----------
-  if (std::isnan(est_vec3_.norm()) || std::isinf(est_vec3_.norm())) {
-    est_vec3_.setZero(); // 避免数值问题导致的发散
-  }
-  double loss =
-      adam_cop_flow(event_groups, est_vec3_,
-                    301, // 方法：精确解析梯度（obj_grad_cop_flow）
-                    1.0, // scale_lambda（可根据需要调整）
-                    1e-6, 1.0, params_.tol_fun, params_.tol_x, params_.max_iter,
-                    params_.max_fun_evals, params_.lr, params_.beta1,
-                    params_.beta2, params_.epsilon, params_.epoch_size);
+  // 随机数设置
+  std::srand(static_cast<unsigned>(std::time(nullptr)));
 
-  return loss;
+  Vector3d best_omega = est_vec3_;
+  int best_score = 0;
+  std::vector<bool> best_inliers(total_events, false);
+
+  int iterations = 0;
+  double w = 0.1; // 初始内点比例估计
+  double prob = 0.0;
+
+  // ---------- 主迭代 ----------
+  while (iterations < max_iter && prob < confidence) {
+    // 步骤1：空间一致性采样（每条线随机选 sample_per_line 个事件）
+    std::vector<std::vector<Event>> sampled_groups(event_groups.size());
+    int total_sampled = 0;
+    for (size_t i = 0; i < event_groups.size(); ++i) {
+      const auto &group = event_groups[i];
+      if (group.empty())
+        continue;
+      int k = std::min(sample_per_line, static_cast<int>(group.size()));
+      std::vector<int> pool(group.size());
+      std::iota(pool.begin(), pool.end(), 0);
+      std::random_shuffle(pool.begin(), pool.end());
+      for (int j = 0; j < k; ++j) {
+        sampled_groups[i].push_back(group[pool[j]]);
+        total_sampled++;
+      }
+    }
+    if (total_sampled < 4)
+      continue; // 最小集不足
+
+    // 步骤2：用采样集估计角速度（Adam 优化）
+    Vector3d omega_cand =
+        best_omega.norm() > 1e-12 ? best_omega : Vector3d::Zero();
+    double loss = adam_cop_flow(
+        sampled_groups, omega_cand, 301, 1.0, 1e-6, 1.0, params_.tol_fun,
+        params_.tol_x, params_.max_iter, params_.max_fun_evals, params_.lr,
+        params_.beta1, params_.beta2, params_.epsilon, params_.epoch_size);
+    if (std::isnan(omega_cand.norm()))
+      continue;
+
+    // 步骤3：计算角度残差（全部事件）
+    std::vector<bool> inliers(total_events, false);
+    int inlier_count = 0;
+    for (size_t g = 0; g < event_groups.size(); ++g) {
+      const auto &group = event_groups[g];
+      for (size_t e = 0; e < group.size(); ++e) {
+        const Event &ev = group[e];
+        // 计算旋转矩阵 R_j
+        double t = ev.t;
+        double theta = t * omega_cand.norm();
+        Matrix3d R;
+        if (theta > THRESHOLD) {
+          Matrix3d omega_cross;
+          omega_cross << 0, -omega_cand(2) * t, omega_cand(1) * t,
+              omega_cand(2) * t, 0, -omega_cand(0) * t, -omega_cand(1) * t,
+              omega_cand(0) * t, 0;
+          double a = std::sin(theta) / theta;
+          double b = (1 - std::cos(theta)) / (theta * theta);
+          R = Matrix3d::Identity() + a * omega_cross +
+              b * omega_cross * omega_cross;
+        } else {
+          Matrix3d omega_cross;
+          omega_cross << 0, -omega_cand(2) * t, omega_cand(1) * t,
+              omega_cand(2) * t, 0, -omega_cand(0) * t, -omega_cand(1) * t,
+              omega_cand(0) * t, 0;
+          R = Matrix3d::Identity() + omega_cross;
+        }
+        Vector3d f_rot = R * ev.bearing_vec;
+        double dot_abs = std::abs(ev.plane_nml.dot(f_rot));
+        if (dot_abs <= sin_thresh) {
+          int global_idx = group_offset[g] + e;
+          inliers[global_idx] = true;
+          inlier_count++;
+        }
+      }
+    }
+
+    // 步骤4,5：更新最佳模型
+    if (inlier_count > best_score) {
+      best_score = inlier_count;
+      best_omega = omega_cand;
+      best_inliers = inliers;
+    }
+
+    // 步骤6：更新概率
+    w = std::max(0.05, static_cast<double>(best_score) / total_events);
+    double n = sample_per_line * event_groups.size();
+    prob =
+        (w >= 1.0) ? 1.0 : 1.0 - std::pow(1.0 - std::pow(w, n), iterations + 1);
+    iterations++;
+  }
+
+  // ---------- 局部精化 ----------
+  if (best_score > 0) {
+    Vector3d refined_omega = best_omega;
+    int refined_score = best_score;
+    auto refined_inliers = best_inliers;
+    for (int iter = 0; iter < inner_refine_iters; ++iter) {
+      // 从当前内点集中随机抽取一部分
+      std::vector<int> inlier_global_ids;
+      for (int i = 0; i < total_events; ++i)
+        if (refined_inliers[i])
+          inlier_global_ids.push_back(i);
+      if (inlier_global_ids.size() < 8)
+        break;
+      std::random_shuffle(inlier_global_ids.begin(), inlier_global_ids.end());
+      int take = std::min(static_cast<int>(inlier_global_ids.size()), 100);
+
+      // 构建采样组（保持线结构，但只使用选中内点）
+      std::vector<std::vector<Event>> refine_groups(event_groups.size());
+      for (int id : inlier_global_ids) {
+        // 找到所属的线和局部索引
+        for (size_t g = 0; g < event_groups.size(); ++g) {
+          if (id >= group_offset[g] &&
+              id < group_offset[g] + (int)event_groups[g].size()) {
+            int local_idx = id - group_offset[g];
+            refine_groups[g].push_back(event_groups[g][local_idx]);
+            break;
+          }
+        }
+      }
+      // 移除空组
+      refine_groups.erase(
+          std::remove_if(refine_groups.begin(), refine_groups.end(),
+                         [](const auto &v) { return v.empty(); }),
+          refine_groups.end());
+
+      Vector3d cand_omega = refined_omega;
+      double loss = adam_cop_flow(
+          refine_groups, cand_omega, 301, 1.0, 1e-6, 1.0, params_.tol_fun,
+          params_.tol_x, params_.max_iter, params_.max_fun_evals, params_.lr,
+          params_.beta1, params_.beta2, params_.epsilon, params_.epoch_size);
+      if (std::isnan(cand_omega.norm()))
+        continue;
+
+      // 评估新模型
+      std::vector<bool> new_inliers(total_events, false);
+      int new_count = 0;
+      // ...（与主循环中相同的残差计算）
+      for (size_t g = 0; g < event_groups.size(); ++g) {
+        const auto &group = event_groups[g];
+        for (size_t e = 0; e < group.size(); ++e) {
+          const Event &ev = group[e];
+          double t = ev.t;
+          double theta = t * cand_omega.norm();
+          Matrix3d R;
+          if (theta > THRESHOLD) {
+            Matrix3d omega_cross;
+            omega_cross << 0, -cand_omega(2) * t, cand_omega(1) * t,
+                cand_omega(2) * t, 0, -cand_omega(0) * t, -cand_omega(1) * t,
+                cand_omega(0) * t, 0;
+            double a = std::sin(theta) / theta;
+            double b = (1 - std::cos(theta)) / (theta * theta);
+            R = Matrix3d::Identity() + a * omega_cross +
+                b * omega_cross * omega_cross;
+          } else {
+            Matrix3d omega_cross;
+            omega_cross << 0, -cand_omega(2) * t, cand_omega(1) * t,
+                cand_omega(2) * t, 0, -cand_omega(0) * t, -cand_omega(1) * t,
+                cand_omega(0) * t, 0;
+            R = Matrix3d::Identity() + omega_cross;
+          }
+          Vector3d f_rot = R * ev.bearing_vec;
+          if (std::abs(ev.plane_nml.dot(f_rot)) <= sin_thresh) {
+            int global_idx = group_offset[g] + e;
+            new_inliers[global_idx] = true;
+            new_count++;
+          }
+        }
+      }
+      if (new_count > refined_score) {
+        refined_score = new_count;
+        refined_omega = cand_omega;
+        refined_inliers = new_inliers;
+      }
+    }
+    best_omega = refined_omega;
+    best_score = refined_score;
+    best_inliers = refined_inliers;
+  }
+
+  // ---------- 最终估计（使用所有最佳内点）----------
+  if (best_score > 0) {
+    std::vector<std::vector<Event>> final_groups(event_groups.size());
+    for (size_t g = 0; g < event_groups.size(); ++g) {
+      for (size_t e = 0; e < event_groups[g].size(); ++e) {
+        int idx = group_offset[g] + e;
+        if (best_inliers[idx])
+          final_groups[g].push_back(event_groups[g][e]);
+      }
+    }
+    // 移除空组
+    final_groups.erase(std::remove_if(final_groups.begin(), final_groups.end(),
+                                      [](const auto &v) { return v.empty(); }),
+                       final_groups.end());
+    if (!final_groups.empty()) {
+      Vector3d final_omega = best_omega;
+      double final_loss = adam_cop_flow(
+          final_groups, final_omega, 301, 1.0, 1e-6, 1.0, params_.tol_fun,
+          params_.tol_x, params_.max_iter, params_.max_fun_evals, params_.lr,
+          params_.beta1, params_.beta2, params_.epsilon, params_.epoch_size);
+      if (!std::isnan(final_omega.norm())) {
+        est_vec3_ = final_omega;
+        return final_loss;
+      }
+    }
+  }
+
+  // 回退：GC‑RANSAC 失败时，用全部事件优化
+  est_vec3_.setZero();
+  return adam_cop_flow(event_groups, est_vec3_, 301, 1.0, 1e-6, 1.0,
+                       params_.tol_fun, params_.tol_x, params_.max_iter,
+                       params_.max_fun_evals, params_.lr, params_.beta1,
+                       params_.beta2, params_.epsilon, params_.epoch_size);
 }
 } // namespace spatiotemporal_vo

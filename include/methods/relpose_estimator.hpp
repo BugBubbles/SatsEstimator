@@ -25,7 +25,7 @@ class RelposeEstimator {
     double beta1 = 0.9;      // Adam beta1
     double beta2 = 0.999;    // Adam beta2
     double epsilon = 1e-9;   // Adam epsilon
-    int epoch_size = 3;     // 平滑窗口大小
+    int epoch_size = 3;      // 平滑窗口大小
   };
 
 public:
