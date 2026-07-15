@@ -1,3 +1,4 @@
+#ifdef BUILD_STR
 #include "methods/icp_estimator.hpp"
 #include "spatiotemporal_vo/common.hpp"
 #include <pcl/point_cloud.h>
@@ -599,3 +600,4 @@ namespace spatiotemporal_vo
     return neighborhoods;
   }
 } // namespace spatiotemporal_vo
+#endif

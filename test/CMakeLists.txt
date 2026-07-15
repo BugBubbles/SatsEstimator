@@ -7,7 +7,6 @@ function(add_test_executable TARGET_NAME SOURCE_FILE)
     target_link_libraries(${TARGET_NAME}
         PRIVATE
             event_camera_vo
-            ${PCL_LIBRARIES}
             ${OpenCV_LIBS}
             ${CERES_LIBRARIES}
             Eigen3::Eigen
@@ -26,6 +25,11 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
     # 获取文件名（不含路径和扩展名）
     get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
     string(REPLACE "main_" "" EXEC_NAME ${TEST_NAME})
+
+    if(NOT BUILD_STR AND TEST_NAME MATCHES "STR")
+        continue()
+    endif()
+
     # 避免重复添加已经手动添加的目标
     if(NOT TARGET ${EXEC_NAME})
         add_test_executable(${EXEC_NAME} ${TEST_SOURCE})

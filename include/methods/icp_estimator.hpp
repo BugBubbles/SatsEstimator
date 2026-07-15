@@ -1,3 +1,4 @@
+#ifdef BUILD_STR
 #pragma once
 
 #include "spatiotemporal_vo/common.hpp"
@@ -273,3 +274,4 @@ namespace spatiotemporal_vo
   };
 
 } // namespace spatiotemporal_vo
+#endif

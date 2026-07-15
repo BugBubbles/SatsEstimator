@@ -1,3 +1,4 @@
+#ifdef BUILD_STR
 #include <iostream>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
@@ -77,3 +78,4 @@ int main(int argc, char **argv)
   std::cout << "\n\nProcessed " << frame_count << " frames." << std::endl;
   return 0;
 }
+#endif

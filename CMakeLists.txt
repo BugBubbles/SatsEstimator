@@ -12,6 +12,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 # --- 是否构建测试 ---
 option(BUILD_TESTS "Build [cmax,stppp,cite] test cases" ON)
+option(BUILD_STR "Build [str] test cases" OFF)
+if(BUILD_STR)
+    add_definitions(-DBUILD_STR)
+endif()
+option(BUILD_RELPOSE "Build [relpose] test cases" OFF)
 # --- 是否将极性分开处理 ---
 option(SEPARATE_POLARITY "Process positive and negative events separately" OFF)
 if(SEPARATE_POLARITY)
@@ -33,10 +38,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # --- 依赖库查找 ---
 # 1. PCL
-find_package(PCL REQUIRED COMPONENTS common io registration kdtree search)
-include_directories(${PCL_INCLUDE_DIRS})
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
+if(BUILD_STR)
+  find_package(PCL REQUIRED COMPONENTS common io registration kdtree search)
+  include_directories(${PCL_INCLUDE_DIRS})
+  link_directories(${PCL_LIBRARY_DIRS})
+  add_definitions(${PCL_DEFINITIONS})
+endif()
 
 find_package(Ceres REQUIRED)
 include_directories(${CERES_INCLUDE_DIRS})
