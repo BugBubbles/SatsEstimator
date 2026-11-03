@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <numeric>
 #include <ctime>
-#include <random>
 #include <iostream>
 #include <ceres/ceres.h>
 #include <ceres/cubic_interpolation.h>
@@ -222,65 +221,68 @@ namespace spatiotemporal_vo
     if (count <= 0 || eventBundle_.empty())
       return;
 
-    const int event_count = eventBundle_.size();
-    const int begin = std::clamp(static_cast<int>(event_count * start_ratio), 0, event_count - 1);
-    const int end = std::clamp(static_cast<int>(event_count * end_ratio), begin + 1, event_count);
+    const int n = eventBundle_.size();
+    const int begin = std::clamp(static_cast<int>(n * start_ratio), 0, n);
+    const int end = std::clamp(static_cast<int>(n * end_ratio), begin, n);
+    if (begin >= end)
+      return;
 
-    std::vector<int> valid_indices;
+    // Rejection sampling can loop forever when no event has enough occupied
+    // neighbours in the 3x3 denoising window. This is common for the
+    // 2000-event dynamic-batch packets. Build the candidate pools once and
+    // fall back to all in-image events when the denoising condition is too
+    // strict for the current packet.
     std::vector<int> denoised_indices;
-    valid_indices.reserve(end - begin);
+    std::vector<int> fallback_indices;
     denoised_indices.reserve(end - begin);
+    fallback_indices.reserve(end - begin);
 
     for (int sample_idx = begin; sample_idx < end; ++sample_idx)
     {
-      // check valid 8 neighbor hood existed
       int sampled_x = eventBundle_.xy[sample_idx].x() + padding_;
       int sampled_y = eventBundle_.xy[sample_idx].y() + padding_;
-      if (sampled_x > 0 && sampled_x < width_ + 2 * padding_ - 1 &&
-          sampled_y > 0 && sampled_y < height_ + 2 * padding_ - 1)
+      if (sampled_x <= 0 || sampled_x >= width_ + 2 * padding_ - 1 ||
+          sampled_y <= 0 || sampled_y >= height_ + 2 * padding_ - 1)
+        continue;
+
+      fallback_indices.push_back(sample_idx);
+
+      int occupied_neighbors = 0;
+      for (int j = -1; j <= 1; ++j)
       {
-        valid_indices.push_back(sample_idx);
-        int neighborhood_count = 0;
-        for (int j = -1; j < 2; j++)
-          for (int k = -1; k < 2; k++)
-          {
-            neighborhood_count += int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
-          }
-
-        if (neighborhood_count > params_.denoise_num)
-          denoised_indices.push_back(sample_idx);
-      }
-    }
-
-    // The old implementation repeatedly sampled until the requested number
-    // of points passed the denoise test. If fewer points were available, that
-    // was an unbounded loop. Prefer denoised points, then use valid image
-    // points so sparse packets always terminate with a usable sample set.
-    std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)));
-    std::shuffle(denoised_indices.begin(), denoised_indices.end(), rng);
-    std::shuffle(valid_indices.begin(), valid_indices.end(), rng);
-
-    const int target = std::min(count, static_cast<int>(valid_indices.size()));
-    indices.reserve(target);
-    indices.insert(indices.end(), denoised_indices.begin(),
-                   denoised_indices.begin() + std::min(target, static_cast<int>(denoised_indices.size())));
-
-    if (static_cast<int>(indices.size()) < target)
-    {
-      std::vector<bool> selected(event_count, false);
-      for (int sample_idx : indices)
-        selected[sample_idx] = true;
-
-      for (int sample_idx : valid_indices)
-      {
-        if (!selected[sample_idx])
+        for (int k = -1; k <= 1; ++k)
         {
-          indices.push_back(sample_idx);
-          selected[sample_idx] = true;
-          if (static_cast<int>(indices.size()) == target)
-            break;
+          occupied_neighbors +=
+              int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
         }
       }
+
+      if (occupied_neighbors > params_.denoise_num)
+        denoised_indices.push_back(sample_idx);
+    }
+
+    const std::vector<int> *candidate_indices = &denoised_indices;
+    if (candidate_indices->empty())
+    {
+      candidate_indices = &fallback_indices;
+      std::cout << "[PEME] Warning: no samples passed the denoising "
+                   "neighbour test; falling back to "
+                << candidate_indices->size() << " in-image events."
+                << std::endl;
+    }
+
+    if (candidate_indices->empty())
+      return;
+
+    cv::RNG rng(static_cast<uint64>(cv::getTickCount()));
+    indices.reserve(count);
+    // Sampling with replacement preserves the requested sample count even
+    // when the valid pool is smaller than count.
+    for (int i = 0; i < count; ++i)
+    {
+      const int candidate =
+          rng.uniform(0, static_cast<int>(candidate_indices->size()));
+      indices.push_back((*candidate_indices)[candidate]);
     }
   }
 
@@ -570,6 +572,8 @@ namespace spatiotemporal_vo
     cv::Mat iwe = getWarpedEventImage(Vec3::Zero(), Vec3::Zero(), event_warpped_Bundle_, isInner);
     for (int iter = 1; iter <= params_.iter_num; ++iter)
     {
+      std::cout << "[PEME] 6DoF optimization iteration " << iter << "/"
+                << params_.iter_num << std::endl;
       Vec6 eg_vec6;
       eg_vec6 << trans_rot_vec[0], trans_rot_vec[1], trans_rot_vec[2], trans_rot_vec[3], trans_rot_vec[4], trans_rot_vec[5];
 
@@ -634,6 +638,14 @@ namespace spatiotemporal_vo
       std::vector<int> vec_sampled_idx;
       int samples_count = std::min(params_.sample_count, eventBundle_.size());
       getSampledIndices(iwe, vec_sampled_idx, samples_count, 0.0, 1.0);
+
+      if (vec_sampled_idx.empty())
+      {
+        std::cerr << "[PEME] No valid samples available; stopping 6DoF "
+                     "optimization for this packet."
+                  << std::endl;
+        break;
+      }
 
       // 构建 Ceres 问题
       ceres::Problem problem;

@@ -1,14 +1,14 @@
 #include <iostream>
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
-#include "methods/translation/cite.hpp"
+#include "methods/6dof/sats.hpp"
 #include "spatiotemporal_vo/logger.hpp"
 
 using namespace spatiotemporal_vo;
 
 int main(int argc, char **argv)
 {
-  std::cout << "=== CITE Visual Odometry (C++) ===" << std::endl;
+  std::cout << "=== SATS Visual Odometry (C++) ===" << std::endl;
 
   // 1. 加载配置
   std::string config_file = (argc > 1) ? argv[1] : "../configs/default.yaml";
@@ -23,8 +23,8 @@ int main(int argc, char **argv)
     std::cerr << "Failed to load events." << std::endl;
     return -1;
   }
-  // 3. 初始化 PEME 估计器
-  CITETranslation estimator(
+  // 3. 初始化 SATS 估计器
+  SATSSixDof estimator(
       config.camera.fx,
       config.camera.fy,
       config.camera.cx,
@@ -33,7 +33,7 @@ int main(int argc, char **argv)
       config.camera.height
       );
   // 4. 初始化日志记录器
-  ResultLogger logger(config.paths.output_root, "cite", config.paths.suffix);
+  ResultLogger logger(config.paths.output_root, "sats", config.paths.suffix);
 
   // 5. 主循环
   int frame_count = 0;
@@ -54,17 +54,19 @@ int main(int argc, char **argv)
 
     data_loader.computeReferenceTime(events, "mean");
 
-    double time_span = events.t.back() - events.t.front();
+    double time_span = events.t_end - events.t_start;
     if (events.empty())
       continue;
 
-    // 运行 PEME 估计
-    RegistrationOutput<3> result = estimator.run(config, events);
-    result.timespan = {t_start, t_start + time_span};
+    std::cout << "Frame " << frame_count << ": " << events.size() << " events" << std::endl;
+
+    // 运行 SATS 估计
+    RegistrationOutput<6> result = estimator.run(config, events);
+    result.timespan = {events.t_start, events.t_end};
 
     if (logger.is_initialized())
     {
-      logger.log<3>(result);
+      logger.log<6>(result);
     }
     t_start += time_span;
     frame_count++;

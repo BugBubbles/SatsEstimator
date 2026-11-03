@@ -1,14 +1,4 @@
-# Coupled Intensity and Timestamp Cues for Event Alignment and Ego-Motion Estimation
-
-This repository contains the official C++ implementation of the paper:
-
-> **Coupled Intensity and Timestamp Cues for Event Alignment and Ego-Motion Estimation**
->
-> *European Conference on Computer Vision (ECCV)*
-
-<p align="center">
-  <img src="docs/overview.png" alt="Method Overview" width="80%"/>
-</p>
+# Spatial Accumulation and Temporal Statistics for Event Alignment and Ego-Motion Estimation
 
 ## Table of Contents
 
@@ -38,7 +28,7 @@ This repository contains the official C++ implementation of the paper:
 This codebase implements several event-camera-based ego-motion estimation methods that exploit the spatiotemporal structure of event streams. Event cameras asynchronously record per-pixel brightness changes with microsecond resolution, providing a rich signal for motion estimation. This project provides a unified C++ framework supporting:
 
 - **Multiple motion models**: pure rotation (3-DOF), planar translation (3-DOF), and full 6-DOF rigid-body motion.
-- **Multiple contrast objectives**: including the proposed CITEnomial contrast objective (CITE), the classical contrast maximization (CMax), spatiotemporal point-plane association (STPPP), the patch-based event motion estimation (PEME), and spatiotemporal registration (STR).
+- **Multiple contrast objectives**: including the proposed Spatial Accumulation and Temporal Statistics (SATS) method, the classical contrast maximization (CMax), spatiotemporal point-plane association (STPPP), the patch-based event motion estimation (PEME), and spatiotemporal registration (STR).
 - **Incremental estimation**: several methods additionally support incremental (frame-to-frame) motion estimation pipelines.
 - **Adaptive event windowing**: an optional grid-based heuristic that dynamically selects the number of events per optimization window using a statistical outlier test on the spatial event rate.
 
@@ -48,7 +38,7 @@ All methods share a common data loading, calibration, and logging infrastructure
 
 | Method | Description | Motion Models |
 |--------|-------------|---------------|
-| **CITE** | CITE contrast maximization — uses a logarithmic contrast function on the image of warped events (IWE) for smooth, well-conditioned optimization. *(Proposed)* | Rotation, Translation, 6-DOF, 6-DOF Incremental |
+| **SATS** | Spatial Accumulation and Temporal Statistics — uses a logarithmic contrast function on the image of warped events (IWE) for smooth, well-conditioned optimization. *(Proposed)* | Rotation, Translation, 6-DOF, 6-DOF Incremental |
 | **CMax** | Classical contrast maximization — maximizes the variance of the IWE. | Rotation, Translation, 6-DOF, 6-DOF Incremental |
 | **STPPP** | Spatiotemporal point-to-plane association — aligns the spatiotemporal surface of events; optionally uses Boost `digamma`/`trigamma` functions. | Rotation, Translation, 6-DOF |
 | **PEME** | Patch-based event motion estimation — uses a time-surface-based Ceres optimization with overlap ratio control for dynamic batching. | Rotation, Translation, 6-DOF |
@@ -140,7 +130,7 @@ make -j$(nproc) && sudo make install
 ### Building the Project
 
 ```bash
-cd CITEEventEstimator
+cd PolyEventEstimator
 
 # Create build directory
 mkdir -p build && cd build
@@ -160,7 +150,7 @@ The following CMake options can be passed at configuration time via `-D<OPTION>=
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `BUILD_TESTS` | `ON` | Build all method executables (CMax, CITE, STPPP, PEME, STR for all motion models). Set to `OFF` to build only the static library `event_camera_vo`. |
+| `BUILD_TESTS` | `ON` | Build all method executables (CMax, SATS, STPPP, PEME, STR for all motion models). Set to `OFF` to build only the static library `event_camera_vo`. |
 | `SEPARATE_POLARITY` | `OFF` | Process positive and negative polarity events independently, maintaining separate warped images and gradients. This doubles memory usage but may improve estimation in scenes with strong polarity asymmetry. |
 | `ANALYTIC_HESSIAN` | `OFF` | **(Deprecated)** Use analytically derived Hessian matrices instead of Gauss–Newton approximation. Significantly increases computation cost and may degrade convergence. **Not recommended.** |
 | `BOOST_AVAILABLE` | `OFF` | Enable Boost math library support. When `ON`, the STPPP method will use `boost::math::digamma` and `boost::math::trigamma` instead of built-in approximations. |
@@ -341,14 +331,14 @@ If no configuration file is provided, the executable defaults to `../configs/def
 
 The following executables are built when `BUILD_TESTS=ON`:
 
-#### Proposed Method (CITE)
+#### Proposed Method (SATS)
 
 | Executable | Motion Model | Description |
 |------------|-------------|-------------|
-| `CITE_rot` | Rotation (3-DOF) | CITE contrast for pure rotation |
-| `CITE_trans` | Translation (3-DOF) | CITE contrast for planar translation |
-| `CITE_6dof` | 6-DOF | CITE contrast for full rigid-body motion |
-| `CITE_6dof_inc` | 6-DOF Incremental | Incremental CITE contrast estimation |
+| `SATS_rot` | Rotation (3-DOF) | SATS contrast for pure rotation |
+| `SATS_trans` | Translation (3-DOF) | SATS contrast for planar translation |
+| `SATS_6dof` | 6-DOF | SATS contrast for full rigid-body motion |
+| `SATS_6dof_inc` | 6-DOF Incremental | Incremental SATS contrast estimation |
 
 #### Baseline: Contrast Maximization (CMax)
 
@@ -389,8 +379,8 @@ The following executables are built when `BUILD_TESTS=ON`:
 ### Example Commands
 
 ```bash
-# Run CITE (proposed) for rotation on the poster_rotation sequence
-./bin/CITE_rot configs/rotation/poster_rotation.yaml
+# Run SATS (proposed) for rotation on the poster_rotation sequence
+./bin/SATS_rot configs/rotation/poster_rotation.yaml
 
 # Run CMax for 6-DOF on MVSEC outdoor_day1
 ./bin/CMax_6dof configs/6dof/outdoor_day1.yaml
@@ -427,7 +417,7 @@ Result filenames follow the pattern: `<method>_<datetime>_<suffix>.txt`
 ## Project Structure
 
 ```
-CITEEventEstimator/
+PolyEventEstimator/
 ├── CMakeLists.txt                    # Root CMake configuration
 ├── README.md                         # This file
 ├── LICENSE                           # MIT License
@@ -441,10 +431,10 @@ CITEEventEstimator/
 │   │   ├── estimator.hpp             # Base MotionEstimator template class
 │   │   ├── peme_estimator.hpp        # PEME estimator
 │   │   ├── icp_estimator.hpp         # STR (ICP-based) estimator
-│   │   ├── rotation/                 # Rotation-specific: CMax, CITE, STPPP
-│   │   ├── translation/             # Translation-specific: CMax, CITE, STPPP
-│   │   ├── 6dof/                    # 6-DOF: CMax, CITE, STPPP
-│   │   └── 6dof_inc/               # 6-DOF incremental: CMax, CITE, STPPP
+│   │   ├── rotation/                 # Rotation-specific: CMax, SATS, STPPP
+│   │   ├── translation/             # Translation-specific: CMax, SATS, STPPP
+│   │   ├── 6dof/                    # 6-DOF: CMax, SATS, STPPP
+│   │   └── 6dof_inc/               # 6-DOF incremental: CMax, SATS, STPPP
 │   └── spatiotemporal_vo/
 │       ├── common.hpp                # Common types: EventPacket, Vec2/3, etc.
 │       ├── config.hpp                # Configuration classes
@@ -461,7 +451,7 @@ CITEEventEstimator/
 │       └── icp_estimator.cpp         # STR implementation
 ├── test/                             # Executable entry points
 │   ├── CMakeLists.txt                # Test executable build configuration
-│   ├── main_CITE_rot.cpp             # CITE rotation entry point
+│   ├── main_SATS_rot.cpp             # SATS rotation entry point
 │   ├── main_CMax_6dof.cpp            # CMax 6-DOF entry point
 │   ├── ...                           # (one main_*.cpp per executable)
 ├── bin/                              # Compiled executables (output)
@@ -474,10 +464,10 @@ CITEEventEstimator/
 If you find this code useful in your research, please cite our paper:
 
 ```bibtex
-@inproceedings{SatsBofeiChen2026,
+@article{SatsBofeiChen2026,
   title     = {Spatial Accumulation and Temporal Statistics for Event Alignment and Ego-Motion Estimation},
   author    = {Bofei Chen, Jie Jiang, Dongyu Xie, and Kaifan Qiao},
-  booktitle = {IEEE Robotics and Automation Letters},
+  journal   = {IEEE Robotics and Automation Letters},
   year      = {2026}
 }
 ```

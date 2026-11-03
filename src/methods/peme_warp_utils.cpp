@@ -10,7 +10,7 @@ namespace spatiotemporal_vo
                                               bool use_later_time)
   {
     warped_bundle.clear();
-    isInner.clear();
+    isInner.assign(eventBundle_.size(), false);
     // 创建三通道16位无符号整型图像
     cv::Mat image = cv::Mat::zeros(height_ + 2 * padding_, width_ + 2 * padding_, CV_16U);
     int n = eventBundle_.size();

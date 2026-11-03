@@ -1,15 +1,15 @@
 #include <iostream>
-#include "methods/6dof/cite.hpp"
+#include "methods/6dof/sats.hpp"
 #include "spatiotemporal_vo/config.hpp"
 #include "spatiotemporal_vo/data_loader.hpp"
-#include "methods/6dof/cite.hpp"
+#include "methods/6dof/sats.hpp"
 #include "spatiotemporal_vo/logger.hpp"
 
 using namespace spatiotemporal_vo;
 
 int main(int argc, char **argv)
 {
-  std::cout << "=== CITE Visual Odometry (C++) ===" << std::endl;
+  std::cout << "=== SATS Visual Odometry (C++) ===" << std::endl;
 
   // 1. 加载配置
   std::string config_file = (argc > 1) ? argv[1] : "../configs/default.yaml";
@@ -24,8 +24,8 @@ int main(int argc, char **argv)
     std::cerr << "Failed to load events." << std::endl;
     return -1;
   }
-  // 3. 初始化 PEME 估计器
-  CITESixDof estimator(
+  // 3. 初始化 SATS 估计器
+  SATSSixDof estimator(
       config.camera.fx,
       config.camera.fy,
       config.camera.cx,
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
       config.camera.height
       );
   // 4. 初始化日志记录器
-  ResultLogger logger(config.paths.output_root, "cite_db", config.paths.suffix);
+  ResultLogger logger(config.paths.output_root, "sats_db", config.paths.suffix);
 
   // 5. 主循环
   int frame_count = 0;
@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     if (events.empty())
       continue;
 
-    // 运行 PEME 估计
+    // 运行 SATS 估计
     past_events_backup = past_events;
     data_loader.computeReferenceTime(past_events_backup, "mean");
     RegistrationOutput<6> result = estimator.run(config, past_events_backup);

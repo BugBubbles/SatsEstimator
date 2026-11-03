@@ -189,7 +189,13 @@ namespace spatiotemporal_vo
           double std = std::sqrt(std::accumulate(score_var_.begin(), score_var_.end(), 0.0) / num_scores - mean * mean);
           // 计算当前自由度下的t分布置信区间
           double t_threshold = t_ppf_[std::min(score_.size() - 2, t_ppf_.size() - 1)];
-          if ((std::abs(metric - mean) < t_threshold * std * min_timespan / (packet.t_end - packet.t_start) && score_.size() < event_count / unit_count) || (events_buffer_.t_end - events_buffer_.t_start < min_timespan))
+          const double packet_timespan = packet.t_end - packet.t_start;
+#ifdef TIME_MODULATION_AVAILABLE
+          const double time_modulation = min_timespan / packet_timespan;
+#else
+          const double time_modulation = 1.0;
+#endif
+          if ((std::abs(metric - mean) < t_threshold * std * time_modulation && score_.size() < event_count / unit_count) || (events_buffer_.t_end - events_buffer_.t_start < min_timespan))
           {
             events_buffer_ += packet;
             score_.push_back(metric);

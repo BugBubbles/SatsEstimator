@@ -21,7 +21,7 @@ public:
   MotionEstimator(double fx, double fy, double cx, double cy, int width,
                   int height)
       : width_(width), height_(height), count_(1), fx_(fx), fy_(fy), cx_(cx),
-        cy_(cy) {
+        cy_(cy), est_params_(Eigen::Matrix<double, N, 1>::Zero()) {
     // 初始化梯度和海森矩阵图像容器
 #ifdef SEPARATE_POLARITY
     warped_image_pos_.resize(height_ + 2 * padding_, width_ + 2 * padding_);

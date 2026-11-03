@@ -1,16 +1,16 @@
 #pragma once
 
-#include "methods/6dof_inc/6dof.hpp"
+#include "methods/translation/translation.hpp"
 
 namespace spatiotemporal_vo
 {
 
-  class CITESixDofInc : public SixDofIncEstimator
+  class SATSTranslation : public TranslationEstimator
   {
   public:
-    using SixDofIncEstimator::SixDofIncEstimator; // 继承所有基类构造函数
+    using TranslationEstimator::TranslationEstimator; // 继承所有基类构造函数
   protected:
-    std::string getMethodName() const override { return "CITESixDofInc"; }
+    std::string getMethodName() const override { return "SATSTranslation"; }
     void iwe_gradient(const EigenMat &iwe, double &loss, EigenMat &grad, EigenMat &hess) const override
     {
       loss = ((iwe.array() + 0.1).log() + std::log(10)).sum() / iwe.sum();
