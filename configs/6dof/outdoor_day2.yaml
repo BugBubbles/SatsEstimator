@@ -2,7 +2,7 @@ experiment_name: outdoor_day2
 seed: 0
 
 paths:
-  data_root: /Datadisk/datasets/MVSEC
+  data_root: /path/to/datasets/MVSEC
   sequences: outdoor_day2
   output_root: ./results
   suffix: 6dof_outdoor_day2_sn0.05_tn

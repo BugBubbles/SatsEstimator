@@ -2,7 +2,7 @@ experiment_name: pemep_vo
 seed: 0
 
 paths:
-  data_root: /Datadisk/datasets/Davis_240C
+  data_root: /path/to/datasets/Davis_240C
   sequences: poster_rotation
   output_root: ./results
   suffix: poster_sn

@@ -10,6 +10,9 @@
   - [Building the Project](#building-the-project)
   - [CMake Options](#cmake-options)
 - [Dataset Preparation](#dataset-preparation)
+  - [ECD / DAVIS 240C Downloads](#ecd--davis-240c-downloads)
+  - [MVSEC: HDF5 to TXT](#mvsec-hdf5-to-txt)
+  - [ELOPE: NPZ to TXT](#elope-npz-to-txt)
 - [Configuration](#configuration)
   - [Configuration File Format](#configuration-file-format)
   - [Configuration Fields](#configuration-fields)
@@ -17,8 +20,10 @@
   - [Running Motion Estimation](#running-motion-estimation)
   - [Executable Reference](#executable-reference)
 - [Output Format](#output-format)
+- [Evaluation](#evaluation)
 - [Project Structure](#project-structure)
 - [Citation](#citation)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ---
@@ -212,9 +217,9 @@ The provided configuration files cover the following public datasets:
 
 | Dataset | Motion Models | Config Directory |
 |---------|---------------|------------------|
-| [DAVIS 240C](https://rpg.ifi.uzh.ch/davis_data.html) (poster_rotation, boxes_rotation, shapes_rotation, dynamic_rotation) | Rotation | `configs/rotation/` |
+| [ECD / DAVIS 240C](https://rpg.ifi.uzh.ch/davis_data.html) (poster_rotation, boxes_rotation, shapes_rotation, dynamic_rotation) | Rotation | `configs/rotation/` |
 | [MVSEC](https://daniilidis-group.github.io/mvsec/) (indoor_flying, outdoor_day) | Translation, 6-DOF | `configs/translation/`, `configs/6dof/` |
-| [ELOPE](https://better-flow.github.io/ELOPE/) | 6-DOF | `configs/6dof/elope.yaml` |
+| [ELOPE](https://zenodo.org/records/15421707) | 6-DOF | `configs/6dof/elope.yaml` |
 
 ### Directory Structure
 
@@ -225,8 +230,98 @@ Organize each sequence as follows:
 └── <sequence_name>/
     ├── events.txt          # Event stream file
     ├── calib.txt           # Camera calibration (fx fy cx cy k1 k2 p1 p2 k3)
-    └── groundtruth.txt     # (Optional) Ground truth poses
+    └── groundtruth.txt     # (Optional) Ground truth velocities for MVSEC/ELOPE
 ```
+
+### ECD / DAVIS 240C Downloads
+
+The [Event-Camera Dataset and Simulator (ECD) official page](https://rpg.ifi.uzh.ch/davis_data.html) provides the DAVIS 240C recordings used by the rotation configurations. Download the **Text (zip)** versions:
+
+| Sequence | Download |
+|----------|----------|
+| `boxes_rotation` | [boxes_rotation.zip](https://rpg.ifi.uzh.ch/datasets/davis/boxes_rotation.zip) |
+| `poster_rotation` | [poster_rotation.zip](https://rpg.ifi.uzh.ch/datasets/davis/poster_rotation.zip) |
+| `shapes_rotation` | [shapes_rotation.zip](https://rpg.ifi.uzh.ch/datasets/davis/shapes_rotation.zip) |
+| `dynamic_rotation` | [dynamic_rotation.zip](https://rpg.ifi.uzh.ch/datasets/davis/dynamic_rotation.zip) |
+
+Extract each sequence under `/path/to/datasets/Davis_240C/`, keeping `events.txt`, `calib.txt`, and `imu.txt` together. Events and calibration already use the TXT formats supported by this project. Rotation evaluation uses the gyroscope columns of `imu.txt`; the dataset's `groundtruth.txt` contains poses. Set `paths.data_root` to your extracted dataset root in `configs/rotation/`.
+
+### Conversion Scripts
+
+The four scripts in `scripts/` convert the downloaded data into the TXT layout above. They require Python 3.9+ and the Python packages `numpy`, `h5py`, `opencv-python` (`cv2`), `scipy`, `tqdm`, and `PyYAML`. Run the commands below from the repository root using an environment with these dependencies available.
+
+All `/path/to/...` paths in this repository are anonymous placeholders. Replace them with your own directories, including `paths.data_root` in the YAML configurations. The scripts accept `--input-root` and `--output-root`; they contain no machine-specific dataset paths.
+
+### MVSEC: HDF5 to TXT
+
+Download the matching `<sequence><index>_data.hdf5` and `<sequence><index>_gt.hdf5` files from the [official MVSEC download page](https://daniilidis-group.github.io/mvsec/download/) ([HDF5 folder](https://drive.google.com/drive/folders/1rwyRk26wtWeRgrAx_fgPc-ubUzTFThkV)). For velocity ground truth, also download the matching `_odom.npz` from the **Ground Truth Optical Flow Generation** section of that page, and obtain the scene calibration archive from its **Calibration** links.
+
+For example, arrange the inputs for `indoor_flying1` as follows:
+
+```text
+/path/to/raw/MVSEC/
+└── indoor_flying/
+    ├── indoor_flying1_data.hdf5
+    ├── indoor_flying1_gt.hdf5
+    ├── indoor_flying1_odom.npz
+    └── indoor_flying_calib/
+        └── camchain-imucam-indoor_flying.yaml
+```
+
+Convert the events and then the velocity ground truth:
+
+```bash
+python scripts/mvsec_reader.py -s indoor_flying -i 1 \
+  --input-root /path/to/raw/MVSEC \
+  --output-root /path/to/datasets/MVSEC
+python scripts/mvsec_gt.py -s indoor_flying -i 1 \
+  --input-root /path/to/raw/MVSEC \
+  --output-root /path/to/datasets/MVSEC
+```
+
+Use `-s outdoor_day -i 1` for `outdoor_day1`, and change the index for other recordings. `--input-root` contains the scene directory; `--output-root` receives one directory per recording, such as `indoor_flying1/`.
+
+- `mvsec_reader.py` reads the left DAVIS events and raw depth maps, subtracts the first event timestamp, fills small depth holes, and interpolates depth between neighboring depth frames. It keeps events with valid depth greater than 4 m and writes `events.txt` with columns `t x y polarity depth`.
+- `mvsec_gt.py` reads `timestamps`, `lin_vel`, and `ang_vel` from `_odom.npz`, uses the same timestamp origin, and writes `groundtruth.txt` with columns `t vx vy vz wx wy wz` (seconds, m/s, rad/s). The script also reads the HDF5 and calibration YAML inputs shown above.
+
+The event converter retains its original append behavior: rerunning it against an existing `events.txt` appends duplicate data. Use a fresh output directory or remove that generated file before repeating conversion.
+
+These two scripts do **not** generate `calib.txt`. Prepare it separately in the output recording directory using the nine-value format documented above. MVSEC's original DAVIS calibration uses an [equidistant model](https://daniilidis-group.github.io/mvsec/calibration_format/), whereas the current C++ loader uses OpenCV's standard distortion model; its four fisheye coefficients cannot simply be copied into the five standard coefficient slots. Calibration and event coordinates must use a consistent model; rectified events require the corresponding rectified intrinsics and zero distortion.
+
+Then set `paths.data_root: /path/to/datasets/MVSEC` and `paths.sequences: indoor_flying1` in the chosen configuration.
+
+### ELOPE: NPZ to TXT
+
+Download `elope_dataset.zip` from the [official ELOPE dataset on Zenodo](https://zenodo.org/records/15421707); the [ESA challenge page](https://live.kelvins.esa.int/elope/) provides dataset context. Extract the archive and point `--input-root` to the directory containing `train/` and `test/`:
+
+```text
+/path/to/raw/ELOPE/
+├── train/
+│   ├── 0000.npz
+│   └── ...
+└── test/
+    └── ...
+```
+
+Convert all NPZ recordings in the selected split:
+
+```bash
+python scripts/elope_reader.py -s train \
+  --input-root /path/to/raw/ELOPE \
+  --output-root /path/to/datasets/ELOPE
+python scripts/elope_gt.py -s train \
+  --input-root /path/to/raw/ELOPE \
+  --output-root /path/to/datasets/ELOPE
+```
+
+Here `-s` selects an input subdirectory, such as `train` or `test`, rather than an individual recording. Each NPZ basename becomes an output sequence directory (for example, `0000/`).
+
+- `elope_reader.py` converts event timestamps from microseconds to seconds, interpolates attitude and range measurements, and computes per-event depth using the existing planar surface model. It writes `events.txt` (`t x y polarity depth`) and `calib.txt`, using the script's fixed 200 × 200 camera, `fx = fy = 241`, `cx = cy = 100`, and zero distortion.
+- `elope_gt.py` rotates trajectory linear velocities into the local frame and writes `groundtruth.txt` (`t vx vy vz wx wy wz`) and `depth.txt` (`t range`). Both scripts read the `range_meter` array in the NPZ input and preserve the original conversion formulas.
+
+The official training split contains full trajectory ground truth. The test split masks position and linear velocity with NaNs, so use training recordings for evaluation against complete velocity ground truth. ELOPE output files are overwritten when conversion is repeated.
+
+Set `paths.data_root: /path/to/datasets/ELOPE` in `configs/6dof/elope.yaml`, and set `paths.sequences` to the converted NPZ basename you want to run (for example, `0000`).
 
 ## Configuration
 
@@ -409,10 +504,38 @@ frame_id t_start t_end runtime param_1 param_2 param_3 [param_4 param_5 param_6]
 | `t_start` | Start timestamp of the event window (seconds) |
 | `t_end` | End timestamp of the event window (seconds) |
 | `runtime` | Wall-clock computation time for this window (seconds) |
-| `param_1..3` | Estimated rotation parameters (angle-axis representation) |
-| `param_4..6` | *(6-DOF only)* Estimated translation parameters |
+| `param_1..3` | Rotation-only: angular velocity (rad/s); translation-only or 6-DOF: linear velocity (m/s) |
+| `param_4..6` | *(6-DOF only)* Angular velocity (rad/s) |
 
 Result filenames follow the pattern: `<method>_<datetime>_<suffix>.txt`
+
+## Evaluation
+
+The four evaluators ported from Event-ST-PPP are available in `eval/`. They read the C++ result logs directly and run without file dialogs. NumPy and SciPy are required; Matplotlib is optional for saved plots.
+
+```bash
+# Pure rotation on ECD (use imu.txt, not pose groundtruth.txt)
+python eval/eval.py -t rot \
+  -g /path/to/datasets/Davis_240C/boxes_rotation/imu.txt \
+  -e /path/to/results/rotation.txt
+
+# Pure translation on MVSEC
+python eval/eval.py -t trans \
+  -g /path/to/datasets/MVSEC/indoor_flying1/groundtruth.txt \
+  -e /path/to/results/translation.txt
+
+# Six-DoF on MVSEC
+python eval/eval.py -t 6dof \
+  -g /path/to/datasets/MVSEC/indoor_flying1/groundtruth.txt \
+  -e /path/to/results/6dof.txt
+
+# ELOPE (also loads depth.txt beside groundtruth.txt)
+python eval/eval.py -t elope \
+  -g /path/to/datasets/ELOPE/0000/groundtruth.txt \
+  -e /path/to/results/elope.txt
+```
+
+Add `--output ./results/metrics.json` to save metrics and `--plot ./results/velocities.png` to save a comparison plot. The original metric formulas, ECD IMU time offset, and historical normalization conventions are preserved; see [eval/README.md](eval/README.md) for input formats, units, time-overlap handling, and the ELOPE score. The adapted evaluation files retain their source license; see [eval/NOTICE.md](eval/NOTICE.md).
 
 ## Project Structure
 
@@ -440,6 +563,8 @@ PolyEventEstimator/
 │       ├── config.hpp                # Configuration classes
 │       ├── data_loader.hpp           # Event data loading and preprocessing
 │       └── logger.hpp                # Result logging
+├── eval/                            # Rotation, translation, six-DoF, and ELOPE evaluation
+├── scripts/                         # MVSEC and ELOPE conversion scripts
 ├── src/
 │   ├── CMakeLists.txt                # Library build configuration
 │   ├── config.cpp                    # Config file parsing
@@ -475,3 +600,9 @@ If you find this code useful in your research, please cite our paper:
 ## Acknowledgements
 
 This work builds upon a number of excellent open-source libraries: [Eigen](https://eigen.tuxfamily.org/), [OpenCV](https://opencv.org/), [Ceres Solver](http://ceres-solver.org/), [PCL](https://pointclouds.org/), and [Boost](https://www.boost.org/). We gratefully acknowledge the developers of these projects.
+
+We also thank the authors of the following projects for making their code available:
+
+- [The Spatio-Temporal Poisson Point Process: A Simple Model for the Alignment of Event Camera Data](https://github.com/pbideau/Event-ST-PPP).
+- [Progressive Spatio-Temporal Alignment for Efficient Event-Based Motion Estimation](https://github.com/huangxueyan/PEME).
+- [Full-DoF Egomotion Estimation for Event Cameras Using Geometric Solvers](https://github.com/jizhaox/relpose-event).

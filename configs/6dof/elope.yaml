@@ -2,7 +2,7 @@ experiment_name: indoor_flying1
 seed: 0
 
 paths:
-  data_root: /mnt/e/Datasets/ELOPE
+  data_root: /path/to/datasets/ELOPE
   sequences: 0023
   output_root: ./results
   suffix: 0023_elope_sn_tn

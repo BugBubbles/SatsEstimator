@@ -2,7 +2,7 @@ experiment_name: shapes_rotation
 seed: 0
 
 paths:
-  data_root: /Datadisk/datasets/Davis_240C
+  data_root: /path/to/datasets/Davis_240C
   sequences: shapes_rotation
   output_root: ./results
   suffix: rot_shapes_tn_sy

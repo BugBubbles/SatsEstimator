@@ -2,7 +2,7 @@ experiment_name: str_vo_demo
 seed: 0
 
 paths:
-  data_root: /mnt/e/Datasets/Davis_240C
+  data_root: /path/to/datasets/Davis_240C
   sequences: boxes_rotation
   output_root: ./results
   suffix: boxes_sy

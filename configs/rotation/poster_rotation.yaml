@@ -2,7 +2,7 @@ experiment_name: poster_rotation
 seed: 0
 
 paths:
-  data_root: /Datadisk/datasets/Davis_240C
+  data_root: /path/to/datasets/Davis_240C
   sequences: poster_rotation
   output_root: ./results
   suffix: rot_poster_tn_sy

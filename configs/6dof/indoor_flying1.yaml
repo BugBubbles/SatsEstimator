@@ -1,5 +1,5 @@
 paths:
-  data_root: /home/temp/cbf_datasets/MVSEC
+  data_root: /path/to/datasets/MVSEC
   sequences: indoor_flying1
   output_root: ./results
   suffix: indoor_flying1

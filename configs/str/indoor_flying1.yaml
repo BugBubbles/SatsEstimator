@@ -2,7 +2,7 @@ experiment_name: indoor_flying1
 seed: 0
 
 paths:
-  data_root: /Datadisk/datasets/MVSEC
+  data_root: /path/to/datasets/MVSEC
   sequences: indoor_flying1
   output_root: ./results
   suffix: indoor_flying1_sn_tn
