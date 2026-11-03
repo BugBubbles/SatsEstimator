@@ -474,15 +474,13 @@ CITEEventEstimator/
 If you find this code useful in your research, please cite our paper:
 
 ```bibtex
-@inproceedings{coupledIWE2026eccv,
-  title     = {Coupled Intensity and Timestamp Cues for Event Alignment and Ego-Motion Estimation},
-  author    = {TODO: Add Authors},
-  booktitle = {European Conference on Computer Vision (ECCV)},
+@inproceedings{SatsBofeiChen2026,
+  title     = {Spatial Accumulation and Temporal Statistics for Event Alignment and Ego-Motion Estimation},
+  author    = {Bofei Chen, Jie Jiang, Dongyu Xie, and Kaifan Qiao},
+  booktitle = {IEEE Robotics and Automation Letters},
   year      = {2026}
 }
 ```
-
-> **Note:** Please update the BibTeX entry with the correct author names, pages, and volume once the paper is published.
 
 ## Acknowledgements
 

@@ -1,17 +1,14 @@
-experiment_name: indoor_flying1
-seed: 0
-
 paths:
-  data_root: /Datadisk/datasets/MVSEC
+  data_root: /home/temp/cbf_datasets/MVSEC
   sequences: indoor_flying1
   output_root: ./results
-  suffix: 6dof_indoor_flying1_sn_tn
+  suffix: indoor_flying1
 
 data:
-  time_window: 0.005
-  event_count: 10000
+  time_window: 0.05
+  event_count: 30000
   unit_count: 2000
-  adaptive_split: false
+  adaptive_split: true
   max_events: 200000000000
   grid_size: 20
 

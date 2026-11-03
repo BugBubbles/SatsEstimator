@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <numeric>
 #include <ctime>
+#include <random>
 #include <iostream>
 #include <ceres/ceres.h>
 #include <ceres/cubic_interpolation.h>
@@ -217,28 +218,67 @@ namespace spatiotemporal_vo
   void PEMEEstimator::getSampledIndices(const cv::Mat &iwe, std::vector<int> &indices, int count,
                                         double start_ratio, double end_ratio)
   {
-    cv::RNG rng(static_cast<unsigned>(std::time(nullptr)));
-    for (int i = 0; i < count;)
-    {
-      int sample_idx = rng.uniform(int(eventBundle_.size() * start_ratio), int(eventBundle_.size() * end_ratio));
+    indices.clear();
+    if (count <= 0 || eventBundle_.empty())
+      return;
 
+    const int event_count = eventBundle_.size();
+    const int begin = std::clamp(static_cast<int>(event_count * start_ratio), 0, event_count - 1);
+    const int end = std::clamp(static_cast<int>(event_count * end_ratio), begin + 1, event_count);
+
+    std::vector<int> valid_indices;
+    std::vector<int> denoised_indices;
+    valid_indices.reserve(end - begin);
+    denoised_indices.reserve(end - begin);
+
+    for (int sample_idx = begin; sample_idx < end; ++sample_idx)
+    {
       // check valid 8 neighbor hood existed
       int sampled_x = eventBundle_.xy[sample_idx].x() + padding_;
       int sampled_y = eventBundle_.xy[sample_idx].y() + padding_;
       if (sampled_x > 0 && sampled_x < width_ + 2 * padding_ - 1 &&
           sampled_y > 0 && sampled_y < height_ + 2 * padding_ - 1)
       {
-        int count = 0;
+        valid_indices.push_back(sample_idx);
+        int neighborhood_count = 0;
         for (int j = -1; j < 2; j++)
           for (int k = -1; k < 2; k++)
           {
-            count += int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
+            neighborhood_count += int(iwe.at<unsigned short>(sampled_y + j, sampled_x + k) > 0);
           }
 
-        if (count > params_.denoise_num)
+        if (neighborhood_count > params_.denoise_num)
+          denoised_indices.push_back(sample_idx);
+      }
+    }
+
+    // The old implementation repeatedly sampled until the requested number
+    // of points passed the denoise test. If fewer points were available, that
+    // was an unbounded loop. Prefer denoised points, then use valid image
+    // points so sparse packets always terminate with a usable sample set.
+    std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)));
+    std::shuffle(denoised_indices.begin(), denoised_indices.end(), rng);
+    std::shuffle(valid_indices.begin(), valid_indices.end(), rng);
+
+    const int target = std::min(count, static_cast<int>(valid_indices.size()));
+    indices.reserve(target);
+    indices.insert(indices.end(), denoised_indices.begin(),
+                   denoised_indices.begin() + std::min(target, static_cast<int>(denoised_indices.size())));
+
+    if (static_cast<int>(indices.size()) < target)
+    {
+      std::vector<bool> selected(event_count, false);
+      for (int sample_idx : indices)
+        selected[sample_idx] = true;
+
+      for (int sample_idx : valid_indices)
+      {
+        if (!selected[sample_idx])
         {
           indices.push_back(sample_idx);
-          i++;
+          selected[sample_idx] = true;
+          if (static_cast<int>(indices.size()) == target)
+            break;
         }
       }
     }

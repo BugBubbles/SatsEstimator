@@ -1,0 +1,24 @@
+# Left camera, 30--32 s clip; native 640x480, per-sequence calibration.
+# The adaptive splitter uses this as the minimum temporal span; event_count is
+# an upper bound and is kept below the requested 50k-event limit.
+paths:
+  data_root: /home/chenbofei/Code/PolyEventEstimator/artifacts/ablation_data_20260919/Octosense
+  sequences: car_sess8
+  output_root: ./octosense
+  suffix: car_sess8
+
+data:
+  time_window: 0.001
+  event_count: 30000
+  unit_count: 2000
+  adaptive_split: true
+  grid_size: 20
+camera:
+  width: 640
+  height: 480
+solver:
+  max_iters: 40
+  convergence_thresh: 1e-6
+  regularization: 0
+  lr: 1.0
+  decay: 0.98
